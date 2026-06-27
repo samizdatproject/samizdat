@@ -2,8 +2,9 @@
 
 import { buildManifest, hashManifest } from '@samizdat/core/manifest';
 import { buildChunkTxs, buildAnchorTx } from '@samizdat/tx/builder';
+import { estimatePublicationFees, type PublicationFeeEstimate } from '@samizdat/tx/fees';
+import { stableStringify, decodeChunkPayload } from '@samizdat/tx/encoding';
 import { verifyChunkData, verifyMerkleRoot } from '@samizdat/core/manifest';
-import { decodeChunkPayload } from '@samizdat/tx/encoding';
 import { stripExif } from '@samizdat/renderer/sanitize';
 import { stripPdfInfo, isPdf } from '@samizdat/renderer/pdfstrip';
 import type { Utxo } from '@samizdat/tx/types';
@@ -12,10 +13,13 @@ import type { FileEntry, ChunkBundle } from './machine';
 import { detectMime } from './mime';
 import { isZip, readZip } from './zipread';
 
+export type { PublicationFeeEstimate };
+
 export interface PrepareResult {
   manifest: Manifest;
   rawChunks: Uint8Array[];
   manifestHash: string;
+  feeEstimate: PublicationFeeEstimate;
 }
 
 export interface BuildTxsResult {
@@ -97,7 +101,16 @@ export async function prepareManifest(
   );
   const rawChunks = chunks.map(c => c.data);
   const manifestHash = await hashManifest(manifest);
-  return { manifest, rawChunks, manifestHash };
+  const manifestJsonLen = stableStringify(manifest).length;
+  const chunkTxidsJsonLen = JSON.stringify(
+    rawChunks.map(() => '0'.repeat(64)),
+  ).length;
+  const feeEstimate = estimatePublicationFees(
+    rawChunks.map(c => c.length),
+    manifestJsonLen,
+    chunkTxidsJsonLen,
+  );
+  return { manifest, rawChunks, manifestHash, feeEstimate };
 }
 
 export async function buildChunkTransactions(

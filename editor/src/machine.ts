@@ -3,6 +3,7 @@
 
 import type { Manifest } from '@samizdat/core/types';
 import type { Utxo } from '@samizdat/tx/types';
+import type { PublicationFeeEstimate } from '@samizdat/tx/fees';
 
 export type EditorMode = 'files' | 'markdown';
 
@@ -47,6 +48,7 @@ export interface EditorState {
   chunkTxids: string[];
   anchorTxid: string;
   manifestHash: string;
+  feeEstimate: PublicationFeeEstimate | null;
   error: string | null;
   utxo: Utxo | null;
   anchorUtxo: Utxo | null;
@@ -69,6 +71,7 @@ export function initialState(): EditorState {
     chunkTxids: [],
     anchorTxid: '',
     manifestHash: '',
+    feeEstimate: null,
     error: null,
     utxo: null,
     anchorUtxo: null,

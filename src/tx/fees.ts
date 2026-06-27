@@ -1,5 +1,13 @@
 // Fee estimation for SAMIZDAT transactions.
 // Data outputs use a data-carrier P2PKH script (blob OP_DROP P2PKH).
+//
+// BSV miner policy (2025–2026): ~100 satoshis per kilobyte of transaction size.
+// Estimates use signed tx byte counts (unlocking scripts included).
+
+export const BYTES_PER_KB = 1024;
+export const DEFAULT_SATS_PER_KB = 100;
+// Minimum satoshis for a data-carrier output (1 sat dust per BSV convention).
+export const DUST_SATOSHIS = 1n;
 
 // Per-input signed size estimate for P2PKH (txid+vout+scriptLen+unlocking+sequence).
 const INPUT_BYTES = 148;
@@ -42,7 +50,51 @@ export function estimateAnchorTxBytes(chunkTxidsJsonLen: number, manifestJsonLen
   return TX_OVERHEAD + INPUT_BYTES + dataOutputBytes + P2PKH_OUTPUT_BYTES;
 }
 
-// Returns the satoshi fee for a given byte count and rate.
-export function satoshisRequired(txBytes: number, satPerByte: number): bigint {
-  return BigInt(Math.ceil(txBytes * satPerByte));
+// Returns the miner fee for a signed transaction size at sats-per-KB.
+export function satoshisRequired(
+  txBytes: number,
+  satsPerKb: number = DEFAULT_SATS_PER_KB,
+): bigint {
+  return BigInt(Math.ceil((txBytes * satsPerKb) / BYTES_PER_KB));
+}
+
+export interface PublicationFeeEstimate {
+  satsPerKb: number;
+  chunkMinerFees: bigint[];
+  anchorMinerFee: bigint;
+  totalMinerFees: bigint;
+  dustOutputs: bigint;
+  /** Minimum UTXO for the first chunk tx (miner fee + 1-sat data output). */
+  minimumFirstUtxoSats: bigint;
+  /** If one UTXO funds every chunk sequentially then the anchor (simplified editor model). */
+  minimumTotalSats: bigint;
+}
+
+export function estimatePublicationFees(
+  chunkDataLengths: number[],
+  manifestJsonLen: number,
+  chunkTxidsJsonLen: number,
+  satsPerKb: number = DEFAULT_SATS_PER_KB,
+): PublicationFeeEstimate {
+  const chunkMinerFees = chunkDataLengths.map((len, i) =>
+    satoshisRequired(estimateChunkTxBytes(len, i), satsPerKb),
+  );
+  const anchorMinerFee = satoshisRequired(
+    estimateAnchorTxBytes(chunkTxidsJsonLen, manifestJsonLen),
+    satsPerKb,
+  );
+  const totalMinerFees = chunkMinerFees.reduce((a, b) => a + b, 0n) + anchorMinerFee;
+  const dustOutputs = BigInt(chunkDataLengths.length + 1);
+  const minimumFirstUtxoSats = (chunkMinerFees[0] ?? 0n) + DUST_SATOSHIS;
+  const minimumTotalSats = totalMinerFees + dustOutputs;
+
+  return {
+    satsPerKb,
+    chunkMinerFees,
+    anchorMinerFee,
+    totalMinerFees,
+    dustOutputs,
+    minimumFirstUtxoSats,
+    minimumTotalSats,
+  };
 }

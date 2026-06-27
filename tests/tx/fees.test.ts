@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { estimateChunkTxBytes, estimateAnchorTxBytes, satoshisRequired } from '../../src/tx/fees';
+import {
+  estimateChunkTxBytes,
+  estimateAnchorTxBytes,
+  satoshisRequired,
+  estimatePublicationFees,
+  DEFAULT_SATS_PER_KB,
+  BYTES_PER_KB,
+} from '../../src/tx/fees';
 
 describe('estimateChunkTxBytes', () => {
   it('returns a positive number for small chunks', () => {
@@ -14,9 +21,6 @@ describe('estimateChunkTxBytes', () => {
   });
 
   it('is roughly overhead + data for a 1KB chunk', () => {
-    // TX overhead(10) + 1 input(148) + OP_RETURN output header(9) + change output(34)
-    // script ≈ 2 (OP_FALSE/OP_RETURN) + push("SAMIZDAT")(5) + push("CHUNK")(6) + push(version)(2)
-    //         + push(index 4B)(5) + push(1024B data)(1025+2) = approx 1047
     const bytes = estimateChunkTxBytes(1024, 0);
     expect(bytes).toBeGreaterThan(1200);
     expect(bytes).toBeLessThan(1300);
@@ -25,7 +29,6 @@ describe('estimateChunkTxBytes', () => {
 
 describe('estimateAnchorTxBytes', () => {
   it('returns a positive number', () => {
-    // 2 chunk txids (2 × 64-char hex = 130+ chars JSON), manifest ~200 chars
     const bytes = estimateAnchorTxBytes(130, 200);
     expect(bytes).toBeGreaterThan(0);
   });
@@ -38,17 +41,39 @@ describe('estimateAnchorTxBytes', () => {
 });
 
 describe('satoshisRequired', () => {
-  it('returns ceil(bytes × rate)', () => {
-    expect(satoshisRequired(100, 1)).toBe(100n);
-    expect(satoshisRequired(100, 2)).toBe(200n);
+  it('charges 100 sats per KB by default', () => {
+    expect(satoshisRequired(BYTES_PER_KB)).toBe(100n);
+    expect(satoshisRequired(BYTES_PER_KB / 2)).toBe(50n);
   });
 
-  it('rounds up fractional bytes', () => {
-    expect(satoshisRequired(10, 1.5)).toBe(15n);
-    expect(satoshisRequired(3, 1.1)).toBe(4n);
+  it('rounds up partial kilobytes', () => {
+    expect(satoshisRequired(1025)).toBe(101n);
+    expect(satoshisRequired(1)).toBe(1n);
+  });
+
+  it('accepts a custom sats-per-KB rate', () => {
+    expect(satoshisRequired(BYTES_PER_KB, 200)).toBe(200n);
   });
 
   it('returns a bigint', () => {
-    expect(typeof satoshisRequired(100, 1)).toBe('bigint');
+    expect(typeof satoshisRequired(100)).toBe('bigint');
+  });
+});
+
+describe('estimatePublicationFees', () => {
+  it('sums chunk and anchor fees with dust outputs', () => {
+    const est = estimatePublicationFees([5000, 5000], 1200, 130);
+    expect(est.satsPerKb).toBe(DEFAULT_SATS_PER_KB);
+    expect(est.chunkMinerFees).toHaveLength(2);
+    expect(est.totalMinerFees).toBe(est.chunkMinerFees[0]! + est.chunkMinerFees[1]! + est.anchorMinerFee);
+    expect(est.dustOutputs).toBe(3n);
+    expect(est.minimumFirstUtxoSats).toBe(est.chunkMinerFees[0]! + 1n);
+    expect(est.minimumTotalSats).toBe(est.totalMinerFees + 3n);
+  });
+
+  it('is far below 1 sat/byte for large chunk txs', () => {
+    const bytes = estimateChunkTxBytes(8000, 0);
+    const perKb = satoshisRequired(bytes);
+    expect(perKb).toBeLessThan(BigInt(bytes));
   });
 });

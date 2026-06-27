@@ -33,10 +33,9 @@ References: genesis-spec.md, BSV Skills Center.
 
 ## Fee Rate
 
-Default miner policy: **1 satoshi per byte** (both `minrelaytxfee` and actual fee).
+Default miner policy: **100 satoshis per kilobyte** of signed transaction size (as of 2025–2026).
 
-- Source: BSV wiki, confirmed by multiple mining pool operators (as of 2024–2025)
-- SAMIZDAT uses 1 sat/byte as the default; configurable per call
+- SAMIZDAT uses 100 sat/KB as the default; configurable per call
 - Fee is estimated from the SIGNED byte size (not unsigned), because the change
   amount is computed before signing
 

@@ -219,7 +219,7 @@ export function renderGuide(): string {
         <p><strong>Do not</strong> use a regulated exchange that required identity verification (KYC). Those records can be subpoenaed and link your wallet to your name.</p>
 
         <div class="sz-section-head" style="margin-top:1rem;font-size:0.85rem">Option A — Faucets (free, tiny amounts — enough for a first post)</div>
-        <p style="font-size:0.85rem;margin:0.4rem 0 0.6rem">A single SAMIZDAT publication costs roughly 200–2 000 satoshis in miner fees. Faucets cover this easily. Availability depends on the faucet's current balance — try more than one if the first is empty.</p>
+        <p style="font-size:0.85rem;margin:0.4rem 0 0.6rem">A single SAMIZDAT publication costs roughly <strong>100–2 000 satoshis</strong> in miner fees at the current <strong>100 sat/KB</strong> rate (shown precisely in the REVIEW step). Faucets cover this easily.</p>
         <div class="sz-guide-steps">
           ${step(1, '<strong>bsvfaucet.net</strong> — mainnet BSV faucet. Visit the site, enter your receiving address, and claim. Funded by community donations; balance varies.')}
           ${step(2, 'If bsvfaucet.net is empty, search "BSV faucet" in the r/bitcoinsv or bitcointalk.org communities — community members periodically run ad-hoc faucets.')}
@@ -242,7 +242,7 @@ export function renderGuide(): string {
         <div class="sz-section-head" style="margin-top:1rem;font-size:0.85rem">All options — wallet hygiene</div>
         <div class="sz-guide-steps">
           ${step(1, 'Use a <strong>fresh wallet</strong> for each publication identity. Do not reuse a wallet that has been used for identified purchases — address reuse links transactions.')}
-          ${step(2, 'Fund the wallet and confirm the funds are spendable before starting the publish flow. You need at least enough to cover fees (1 sat/byte is the BSV standard).')}
+          ${step(2, 'Fund the wallet and confirm the funds are spendable before starting the publish flow. The REVIEW step shows how many satoshis you need (BSV miners charge about <strong>100 satoshis per KB</strong> of transaction size).')}
         </div>
         <p class="sz-guide-note">There is no perfect approach. Evaluate your threat model honestly. The opsec guide (docs/opsec-guide.md) covers this in depth.</p>
       `)}

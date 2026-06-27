@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildManifest, verifyChunkData } from '../../src/core/manifest';
 import { buildChunkTxs, buildAnchorTx } from '../../src/tx/builder';
+import { estimateChunkTxBytes } from '../../src/tx/fees';
 import { buildReceipt } from '../../src/tx/receipt';
 import { encodeChunkPayload, encodeAnchorPayload, decodeChunkPayload, decodeAnchorPayload } from '../../src/tx/encoding';
 import type { Utxo } from '../../src/tx/types';
@@ -105,20 +106,15 @@ describe('full publish flow integration', () => {
     expect(result).toBe(false);
   });
 
-  it('fee estimates are within 10% of actual unsigned tx size', async () => {
+  it('fee estimate uses signed tx size at 100 sats/KB', async () => {
     const content = new Uint8Array(500).fill(0x42);
     const { manifest } = await buildManifest(
       [{ filename: 'b.bin', contentType: 'application/octet-stream', data: content }],
     );
     const bundles = await buildChunkTxs(manifest, [content], makeUtxo());
     const bundle = bundles[0]!;
-    // Unsigned tx is smaller than signed by ~107 bytes per input (no unlocking script yet).
-    // The fee estimate is for the SIGNED size. Unsigned should be noticeably smaller.
-    const actualUnsignedBytes = bundle.hexTx.length / 2;
-    const estimatedSignedFee = Number(bundle.feeEstimateSats); // 1 sat/byte estimate
-    // Unsigned must be less than the signed estimate (missing ~107 byte unlocking script)
-    expect(actualUnsignedBytes).toBeLessThan(estimatedSignedFee);
-    // But not less than signed estimate minus 200 bytes (reasonable lower bound)
-    expect(actualUnsignedBytes).toBeGreaterThan(estimatedSignedFee - 200);
+    const txBytes = estimateChunkTxBytes(content.length, 0);
+    expect(bundle.feeEstimateSats).toBe(BigInt(Math.ceil((txBytes * 100) / 1024)));
+    expect(bundle.feeEstimateSats).toBeLessThan(BigInt(txBytes));
   });
 });

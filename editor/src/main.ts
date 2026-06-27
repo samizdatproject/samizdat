@@ -249,6 +249,41 @@ function renderPrepare(): string {
   </div>`;
 }
 
+function renderFeeEstimatePanel(): string {
+  const f = state.feeEstimate;
+  if (!f) return '';
+
+  const chunkLines = f.chunkMinerFees.map((fee, i) =>
+    `<li>Chunk ${i + 1}: ~${formatSatoshis(fee)}</li>`,
+  ).join('');
+
+  return `
+    <div class="sz-notice sz-mb">
+      <div class="sz-data-label">Estimated miner fees (${f.satsPerKb} satoshis per KB)</div>
+      <p style="margin:0.4rem 0 0.5rem;font-size:0.9rem;color:var(--sz-ink)">
+        BSV miners currently charge about <strong>${f.satsPerKb} sat/KB</strong> of signed transaction size.
+        Your publication needs:
+      </p>
+      <ul style="margin:0.25rem 0 0.75rem 1.25rem;font-size:0.9rem;color:var(--sz-ink)">
+        ${chunkLines}
+        <li>Anchor: ~${formatSatoshis(f.anchorMinerFee)}</li>
+      </ul>
+      <div class="sz-stats" style="margin-top:0.5rem">
+        <span class="sz-stat-label">Total miner fees</span>
+        <span class="sz-stat-value">~${formatSatoshis(f.totalMinerFees)}</span>
+        <span class="sz-stat-label">Min. first UTXO</span>
+        <span class="sz-stat-value">${formatSatoshis(f.minimumFirstUtxoSats)}</span>
+        <span class="sz-stat-label">Min. one UTXO (all txs)</span>
+        <span class="sz-stat-value">${formatSatoshis(f.minimumTotalSats)}</span>
+      </div>
+      <p class="sz-field-hint" style="margin-top:0.6rem">
+        Each transaction also includes a 1-sat data output (${formatSatoshis(f.dustOutputs)} sats total across
+        ${f.chunkMinerFees.length + 1} transaction(s)). Unused change returns to your wallet.
+        Fund your UTXO with at least the <strong>minimum first UTXO</strong> amount before building.
+      </p>
+    </div>`;
+}
+
 function renderReview(): string {
   const manifest   = state.manifest!;
   const totalBytes = manifest.chunkTree.reduce((s, c) => s + c.size, 0);
@@ -262,6 +297,8 @@ function renderReview(): string {
           <div class="sz-warn"><span class="sz-warn-label">Irreversible</span>: once broadcast, the content hash is permanently anchored on the BSV blockchain. there is no undo.</div>
           <div class="sz-warn"><span class="sz-warn-label">Public record</span>: the manifest hash and all chunk hashes become publicly inspectable on-chain.</div>
         </div>
+
+        ${renderFeeEstimatePanel()}
 
         ${manifest.title ? `<div class="sz-mb">
           <span class="sz-data-label">Title</span>
@@ -348,6 +385,8 @@ function renderConfirm(): string {
         <div class="sz-warn-block">
           <div class="sz-warn"><span class="sz-warn-label">Warning</span>: signing and broadcasting the chunk transactions commits the content hash irreversibly. you cannot undo this action.</div>
         </div>
+
+        ${renderFeeEstimatePanel()}
 
         ${utxoForm('chunk-utxo', 'Funding UTXO for chunk transaction(s)', `
           Enter an unspent output from your BSV wallet. This funds the chunk transaction(s).
@@ -763,16 +802,18 @@ function attachHandlers(): void {
         await transition('PREPARE', async () => {
           state.files = await processMarkdown(draft, filename);
           const result = await prepareManifest(state.files, title);
-          state.manifest    = result.manifest;
-          state.rawChunks   = result.rawChunks;
+          state.manifest     = result.manifest;
+          state.rawChunks    = result.rawChunks;
           state.manifestHash = result.manifestHash;
+          state.feeEstimate  = result.feeEstimate;
         });
       } else {
         await transition('PREPARE', async () => {
           const result = await prepareManifest(state.files, title);
-          state.manifest    = result.manifest;
-          state.rawChunks   = result.rawChunks;
+          state.manifest     = result.manifest;
+          state.rawChunks    = result.rawChunks;
           state.manifestHash = result.manifestHash;
+          state.feeEstimate  = result.feeEstimate;
         });
       }
     });
@@ -1071,7 +1112,7 @@ function utxoForm(idPrefix: string, label: string, hint: string): string {
         <div class="sz-form-row">
           <label>Amount (satoshis)</label>
           <input type="number" id="${idPrefix}-sats" min="1" placeholder="100000000">
-          <div class="sz-field-hint">The value of this output in satoshis (1 BSV = 100,000,000 satoshis). Must be larger than the fee estimate shown after building. In ElectrumSV: View → Coins → Value column.</div>
+          <div class="sz-field-hint">The value of this output in satoshis (1 BSV = 100,000,000 satoshis). Must be at least the <strong>minimum first UTXO</strong> shown above (miner fee at 100 sat/KB + 1 sat data output). In ElectrumSV: View → Coins → Value column.</div>
         </div>
         <div class="sz-form-row">
           <label>Locking script hex (P2PKH)</label>

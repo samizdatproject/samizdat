@@ -9,15 +9,17 @@ import type { Utxo, UnsignedTxBundle } from './types';
 import { buildP2PKHScript, buildDataCarrierScript } from './script';
 import { buildUnsignedTx } from './rawtx';
 import { encodeChunkPayload, encodeAnchorPayload, stableStringify } from './encoding';
-import { estimateChunkTxBytes, estimateAnchorTxBytes, satoshisRequired } from './fees';
+import {
+  DUST_SATOSHIS,
+  DEFAULT_SATS_PER_KB,
+  estimateChunkTxBytes,
+  estimateAnchorTxBytes,
+  satoshisRequired,
+} from './fees';
 import { toHex, fromHex } from '../core/hash';
 import { hashManifest } from '../core/manifest';
 import { validateRawTxHex } from './parse';
 import { buildElectrumIncompleteFromBundle } from './electrum';
-
-const DEFAULT_SAT_PER_BYTE = 1;
-// Minimum satoshis for a data-carrier output (1 sat dust per BSV convention).
-const DUST_SATOSHIS = 1n;
 
 function scriptToHex(script: Uint8Array): string {
   return toHex(script);
@@ -52,7 +54,7 @@ export async function buildChunkTxs(
   manifest: Manifest,
   chunkDataArray: Uint8Array[],
   utxo: Utxo,
-  satPerByte: number = DEFAULT_SAT_PER_BYTE,
+  satsPerKb: number = DEFAULT_SATS_PER_KB,
 ): Promise<UnsignedTxBundle[]> {
   if (chunkDataArray.length !== manifest.chunkTree.length) {
     throw new Error(
@@ -74,9 +76,16 @@ export async function buildChunkTxs(
     const chunkRef = manifest.chunkTree[i]!;
     const blob = encodeChunkPayload(i, data);
     const carrierScript = buildDataCarrierScript(blob, pubKeyHash);
-    const feeEstimate = satoshisRequired(estimateChunkTxBytes(data.length, i), satPerByte);
+    const feeEstimate = satoshisRequired(estimateChunkTxBytes(data.length, i), satsPerKb);
     const changeSats = remaining - DUST_SATOSHIS - feeEstimate;
-    if (changeSats < 0n) throw new Error(`Insufficient funds for chunk ${i}: need ${feeEstimate + DUST_SATOSHIS} sats`);
+    if (changeSats < 0n) {
+      const need = feeEstimate + DUST_SATOSHIS;
+      throw new Error(
+        `Insufficient funds for chunk ${i}: need at least ${need} sats in this UTXO `
+        + `(~${feeEstimate} sats miner fee at ${satsPerKb} sats/KB + 1 sat data output), `
+        + `have ${remaining} sats`,
+      );
+    }
 
     const changeScript = buildP2PKHScript(pubKeyHash);
     const rawTx = buildUnsignedTx(
@@ -109,7 +118,7 @@ export async function buildAnchorTx(
   manifest: Manifest,
   chunkTxids: string[],
   utxo: Utxo,
-  satPerByte: number = DEFAULT_SAT_PER_BYTE,
+  satsPerKb: number = DEFAULT_SATS_PER_KB,
 ): Promise<UnsignedTxBundle> {
   if (chunkTxids.length !== manifest.chunkTree.length) {
     throw new Error(
@@ -130,12 +139,17 @@ export async function buildAnchorTx(
   const anchorScript = buildDataCarrierScript(anchorBlob, pubKeyHash);
   const feeEstimate = satoshisRequired(
     estimateAnchorTxBytes(chunkTxidsJson.length, manifestJson.length),
-    satPerByte,
+    satsPerKb,
   );
 
   const changeSats = utxo.satoshis - DUST_SATOSHIS - feeEstimate;
   if (changeSats < 0n) {
-    throw new Error(`Insufficient funds for anchor tx: need ${feeEstimate + DUST_SATOSHIS} sats, have ${utxo.satoshis}`);
+    const need = feeEstimate + DUST_SATOSHIS;
+    throw new Error(
+      `Insufficient funds for anchor tx: need at least ${need} sats `
+      + `(~${feeEstimate} sats miner fee at ${satsPerKb} sats/KB + 1 sat data output), `
+      + `have ${utxo.satoshis} sats`,
+    );
   }
 
   const changeScript = buildP2PKHScript(pubKeyHash);
