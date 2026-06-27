@@ -29,11 +29,11 @@ The editor **never holds your keys**. The operator **never holds your funds**. T
 
 2. **Deterministic chunking** — Content is split into chunks. Each chunk is hashed with SHA-256 (domain-separated leaf hashing). A binary Merkle tree produces a **root hash** that commits to the entire document byte-for-byte.
 
-3. **Unsigned transactions only** — The client builds chunk transaction(s) and an anchor transaction. You export them, sign in ElectrumSV or another wallet, and broadcast. No in-browser wallet. No browser extension.
+3. **Unsigned transactions only** — The client builds chunk transaction(s) and an anchor transaction. You export a **sign bundle**, sign via **sign.html** or the CLI, and broadcast. No in-browser wallet on the publish page. No browser extension.
 
 4. **Fail-safe publish order** — Chunk transactions are broadcast and **hash-verified first**. The anchor transaction is built **only after** every chunk hash is confirmed. A failed or partial publish cannot consume funds for an anchor that references missing or corrupt data.
 
-5. **Stateless verification** — A renderer accepts a manifest hash or txid, fetches the on-chain data, re-hashes every chunk, checks the Merkle root, and only then serves safe HTML or downloads. If verification fails, it shows an error page. **No partial content is ever presented as verified.**
+5. **Stateless verification** — A renderer accepts an **anchor txid** (`GET /tx/<txid>`), fetches on-chain data, re-hashes every chunk, checks the Merkle root, and only then serves safe HTML or downloads. If verification fails, it shows an error page. **No partial content is ever presented as verified.**
 
 6. **Metadata stripping** — JPEG/PNG EXIF and PDF /Info metadata are stripped locally before hashing. You are warned about Office documents and other formats that may still carry identifying metadata.
 
@@ -95,7 +95,7 @@ Authoring client → Chunking engine → Your wallet signs → BSV anchor → Re
 
 1. **Authoring client** — static web editor; zero third-party assets; strict CSP
 2. **Chunking engine** — deterministic chunking, hashing, Merkle tree, manifest
-3. **Publication anchor** — unsigned txs exported; you sign in ElectrumSV or CLI
+3. **Publication anchor** — unsigned txs exported as sign bundles; you sign via sign.html or CLI
 4. **Renderer** — stateless; verifies all hashes; safe HTML only
 5. **Indexer** — optional; never canonical; no IP logging in the reference design
 

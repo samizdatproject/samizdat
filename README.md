@@ -25,7 +25,7 @@ The word *samizdat* (Russian: самиздат) described the practice of clande
 - [Running the Editor](#running-the-editor)
 - [Running the Renderer](#running-the-renderer)
 - [Deploying an Onion Site](#deploying-an-onion-site)
-- [CLI Transaction Signing](#cli-transaction-signing)
+- [Signing Transactions](#signing-transactions)
 - [Testing](#testing)
 - [Protocol Specification](#protocol-specification)
 - [Hard Rules](#hard-rules)
@@ -121,7 +121,7 @@ COLLECT_CHUNK_TXIDS
   │  author signs + broadcasts in their wallet; pastes txid(s) back
   ▼
 VERIFY_CHUNKS
-  │  client fetches signed tx, re-hashes every chunk payload, compares
+  │  author pastes signed chunk tx hex; editor re-hashes locally (no network)
   │  to declared chunk hashes — BLOCKED until all match
   ▼
 EXPORT_ANCHOR
@@ -131,15 +131,15 @@ COLLECT_ANCHOR_TXID
   │  author signs + broadcasts anchor; pastes anchor txid back
   ▼
 VERIFY_ANCHOR
-  │  client fetches anchor tx, verifies manifest hash and Merkle root
+  │  author pastes signed anchor tx hex; editor verifies chunk Merkle root
   ▼
 RECEIPT
      manifest hash, txid(s), root hash, retrieval endpoints
 ```
 
-**Why this order matters:** the anchor transaction is never built until every chunk has been retrieved and its hash independently verified. If any chunk fails, the anchor is never created. This means a failed or partial publish cannot consume funds for an anchor that references missing or corrupt data.
+**Why this order matters:** the anchor transaction is never built until every chunk has been hash-verified from the signed transaction hex you paste. If any chunk fails, the anchor is never created. This means a failed or partial publish cannot consume funds for an anchor that references missing or corrupt data.
 
-The client never touches private keys. It exports a raw unsigned transaction hex that the author signs in their own wallet — ElectrumSV, command-line tools, or any compatible BSV signer.
+The client never touches private keys. It exports a **sign bundle** (JSON marked `"unsigned": true` with hex and per-input metadata) for external signing — typically via **`sign.html`** (offline WIF signer) or `scripts/sign-tx.ts`. Optional ElectrumSV JSON export is available if you provide xpub/derivation in the UTXO form.
 
 ---
 
@@ -159,6 +159,7 @@ The client never touches private keys. It exports a raw unsigned transaction hex
 - Verifies the Merkle root with `verifyMerkleRoot` before rendering
 - Returns a 422 with a clean error page if any verification fails
 - Sanitizes HTML (removes scripts, event handlers, external fetches)
+- Renders `text/markdown` as sanitized HTML
 - Strips EXIF metadata from images
 - Serves PDFs as `Content-Disposition: attachment` only — no inline execution
 - Enforces strict CSP on rendered output
@@ -192,20 +193,23 @@ samizdat/
 │   │   ├── fees.ts         # Exact byte-count fee estimator
 │   │   ├── receipt.ts      # PublicationRecord builder
 │   │   ├── rawtx.ts        # Raw BSV transaction serialization
-│   │   ├── script.ts       # Script assembly
+│   │   ├── sign-bundle.ts  # Wallet-agnostic unsigned tx export
+│   │   ├── electrum.ts     # Optional ElectrumSV incomplete JSON
+│   │   ├── script.ts       # Data-carrier P2PKH script assembly
 │   │   ├── varint.ts       # Bitcoin varint encoding
 │   │   └── types.ts        # Tx and UTXO types
 │   ├── renderer/           # Stateless renderer
 │   │   ├── handler.ts      # HTTP request handler
-│   │   ├── resolver.ts     # Manifest + txid resolution from chain
+│   │   ├── resolver.ts     # Anchor txid → manifest resolution
 │   │   ├── fetcher.ts      # Chunk fetching via pluggable ChunkSource
-│   │   ├── chain.ts        # TxChunkSource (WoC-backed)
+│   │   ├── markdown.ts     # Markdown → HTML (sanitized before serve)
+│   │   ├── chain.ts        # ChainReader + ChunkSource interfaces
 │   │   ├── reconstruct.ts  # File tree reconstruction from verified chunks
 │   │   ├── sanitize.ts     # HTML sanitizer, EXIF stripper
 │   │   ├── pdfstrip.ts     # PDF /Info dictionary stripper
 │   │   ├── zip.ts          # Verified-content ZIP packager
 │   │   └── errors.ts       # Renderer error types
-│   ├── chain/              # Chain reader (WhatsOnChain)
+│   ├── chain/              # Chain readers (WoC, Bitails, node RPC)
 │   ├── indexer/            # Optional indexer
 │   │   ├── scan.ts         # Block scanner for SAMIZDAT anchors
 │   │   ├── store.ts        # Append-only IndexStore
@@ -213,18 +217,21 @@ samizdat/
 │   ├── test-vectors/       # Committed reproducibility vectors
 │   │   └── vectors.json
 │   ├── index.ts            # Library entry point
-│   └── server.ts           # Renderer HTTP server entry point
+│   └── server.ts           # Renderer-only HTTP server (GET /tx/<txid>)
 ├── editor/                 # Tor-safe web editor
 │   ├── src/
 │   │   ├── main.ts         # Publish state machine + UI
-│   │   ├── guide.ts        # Built-in guide + Hello World sample
+│   │   ├── guide.ts        # Built-in guide + sample markdown
+│   │   ├── sign-page.ts    # Offline WIF signer page logic
+│   │   ├── sign-wif.ts     # BIP143 signing (sign.html + CLI)
 │   │   ├── mime.ts         # Magic-byte MIME detection
-│   │   ├── styles.css      # Self-contained styles (sz-* prefix)
-│   │   └── vite-env.d.ts
-│   ├── index.html          # CSP headers inline
-│   └── dist/               # Production build (served by nginx on onion)
+│   │   └── styles.css      # Self-contained styles (sz-* prefix)
+│   ├── index.html          # Editor entry (CSP inline)
+│   ├── sign.html           # Offline transaction signer
+│   └── dist/               # Production build (index.html + sign.html)
+├── serve.ts                # Combined editor static + renderer API (recommended for single onion)
 ├── scripts/
-│   └── sign-tx.ts          # CLI signing tool (ElectrumSV-compatible)
+│   └── sign-tx.ts          # CLI signing tool (uses sign bundle hex + input metadata)
 ├── tests/
 │   ├── core/               # Unit tests — hash, merkle, chunker, manifest
 │   ├── tx/                 # Unit tests — builder, fees, receipt, encoding
@@ -258,7 +265,7 @@ samizdat/
 git clone git@github.com:samizdatproject/samizdat.git
 cd samizdat
 npm install
-npm test              # 313 unit tests
+npm test              # 328 unit tests
 npm run typecheck     # zero type errors
 ```
 
@@ -269,40 +276,40 @@ npm run typecheck     # zero type errors
 The editor is a fully self-contained static web app. No server-side logic. No network requests. No dependencies at runtime.
 
 ```bash
-cd editor
-npm install
-npm run dev           # http://localhost:5173 — secure context, crypto.subtle works
-
-npm run build         # production bundle → editor/dist/
-npm run preview       # serve built dist at http://localhost:4173
+npm run editor:dev      # http://localhost:5173 — secure context, crypto.subtle works
+npm run editor:build      # production bundle → editor/dist/
 ```
 
-**For remote / container access (HTTPS):**
+For HTTPS dev/preview (remote access), from the `editor/` directory:
 
 ```bash
 cd editor
-npm run dev:https     # https://0.0.0.0:5173 — self-signed cert, accept once
-npm run preview:https # https://0.0.0.0:4173
+npm run dev:https       # https://0.0.0.0:5173 — self-signed cert, accept once
+npm run preview:https   # https://0.0.0.0:4173
 ```
 
-The editor loads with a Hello World sample and a built-in guide (click **Guide** in the header) covering:
+The editor includes a **Load sample** button (full SAMIZDAT intro markdown) and a built-in **Guide** (header) covering:
 - How to use Tor Browser and obtain an anonymous BSV address
 - The 10-step publish flow explained step by step
-- How to sign unsigned transactions with ElectrumSV or the CLI tool
+- How to sign with the **sign bundle** + **sign.html** (or CLI); ElectrumSV JSON is optional
 - Operational security warnings for each publish step
 
 ---
 
 ## Running the Renderer
 
-The renderer is a stateless Node HTTP service. It accepts a BSV txid or manifest hash, fetches the on-chain data via WhatsOnChain, verifies all hashes, and serves safe HTML or a download.
+The renderer is a stateless Node HTTP service. It accepts an **anchor txid** via `GET /tx/<64-hex-txid>`, fetches on-chain data via a configurable chain backend (WhatsOnChain by default), verifies all hashes, and serves safe HTML or a download. `text/markdown` files are converted to sanitized HTML.
 
 ```bash
-# Development
+# Renderer only (default port 3000)
 npm run build
-tsx src/server.ts
+npm run renderer:dev    # tsx src/server.ts
 
-# Production (via deploy/install.sh)
+# Editor + renderer on one port (default 8089) — common for a single .onion
+npm run editor:build
+npx tsx serve.ts
+
+# Production (via deploy/install.sh — separate renderer + indexer systemd units)
 sudo bash deploy/install.sh
 ```
 
@@ -313,12 +320,16 @@ The installer:
 - Drops `deploy/nginx-samizdat.conf` for nginx proxy configuration
 - Prints final status
 
-Environment variables for the renderer:
+Environment variables for `src/server.ts`:
 
 ```bash
 PORT=3000              # HTTP port (default: 3000)
-NODE_ENV=production
+HOST=127.0.0.1         # Bind address (default: loopback)
+BSV_NETWORK=main       # main | test | stn
+CHAIN_SOURCE=woc       # woc | bitails | node
 ```
+
+For `serve.ts`: `PORT`, `HOST`, `BSV_NETWORK` (chain source is WhatsOnChain main/test).
 
 ---
 
@@ -326,33 +337,46 @@ NODE_ENV=production
 
 The editor is designed to be served as a Tor hidden service. This is the recommended deployment for maximum author anonymity.
 
-### Quick setup
+### Quick setup (combined editor + renderer)
+
+For a single `.onion` serving both the editor and renderer API, run `serve.ts` and proxy `/tx/` to it:
 
 ```bash
 # 1. Install tor and nginx
 apt install tor nginx
 
-# 2. Build the editor
-cd /path/to/samizdat/editor && npm run build
+# 2. Build from repo root
+cd /path/to/samizdat
+npm install && npm run editor:build
 
-# 3. Add nginx backend (127.0.0.1:8765 only — never on a public interface)
+# 3. Run combined server (editor static + GET /tx/<txid>)
+PORT=8089 npx tsx serve.ts   # or systemd unit wrapping the same command
+
+# 4. nginx backend (127.0.0.1:8765 only — never on a public interface)
 cat > /etc/nginx/sites-available/samizdat-onion << 'EOF'
 server {
     listen 127.0.0.1:8765;
-    root /path/to/samizdat/editor/dist;
-    index index.html;
     access_log off;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self';" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
     add_header Referrer-Policy "no-referrer" always;
-    location / { try_files $uri $uri/ /index.html; }
+    location /tx/ {
+        proxy_pass http://127.0.0.1:8089;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:8089;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
 }
 EOF
 ln -s /etc/nginx/sites-available/samizdat-onion /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 
-# 4. Configure the hidden service
+# 5. Configure the hidden service
 cat >> /etc/tor/torrc << 'EOF'
 HiddenServiceDir /var/lib/tor/samizdat/
 HiddenServicePort 80 127.0.0.1:8765
@@ -360,9 +384,15 @@ HiddenServiceVersion 3
 EOF
 systemctl restart tor
 
-# 5. Get your .onion address
+# 6. Get your .onion address
 cat /var/lib/tor/samizdat/hostname
 ```
+
+Readers open **`http://<your-onion>/tx/<anchor-txid>`** to view verified content.
+
+### Alternative: static editor only
+
+If you run `src/server.ts` as a separate renderer service, serve `editor/dist/` as static files only (see [`docs/deployment.md`](docs/deployment.md) for the three-service nginx layout).
 
 The v3 onion address (56 characters, ed25519) is printed by the last command. Share it with authors.
 
@@ -380,62 +410,66 @@ Back up `hs_ed25519_secret_key` immediately. If lost, the `.onion` address canno
 ### Updating
 
 ```bash
-cd /path/to/samizdat/editor && npm run build
-# nginx serves dist/ directly — no reload needed
+cd /path/to/samizdat && npm run editor:build
+# Restart serve.ts if used; nginx reload only needed when config changes
 ```
 
 For detailed deployment guides including clearnet mirrors, private nodes, and monitoring that does not log user queries, see [`docs/deployment.md`](docs/deployment.md).
 
 ---
 
-## CLI Transaction Signing
+## Signing Transactions
 
-Authors who prefer a command-line workflow can use the included signing script instead of ElectrumSV.
+The editor exports a **sign bundle** — JSON with `"protocol": "samizdat-sign-bundle"`, `"unsigned": true`, the raw transaction hex, and per-input metadata (outpoint, satoshis, locking script). This is the primary, wallet-agnostic signing format.
+
+**Recommended (browser, offline):**
+
+1. Copy the sign bundle from the export step (COPY BUNDLE) or click OPEN SIGNER.
+2. Open **`sign.html`**, paste the bundle and your WIF, click Sign.
+3. Broadcast the signed hex via any BSV tool; paste the resulting **txid** back into the editor.
+
+**CLI alternative:**
 
 ```bash
-# Install dependency (already in package.json)
-npm install
-
-# Sign a transaction
 echo "$WIF" | npx tsx scripts/sign-tx.ts \
-  --tx <unsigned-tx-hex> \
-  --sats <input-satoshis> \
-  --script <locking-script-hex>
+  --tx <unsigned-hex-from-bundle> \
+  --sats <input-satoshis-from-bundle> \
+  --script <locking-script-hex-from-bundle>
 ```
 
-The script reads the WIF private key from stdin (avoids shell history). It uses `@noble/curves/secp256k1` (Trail of Bits audited) for BIP143 signing with SIGHASH_FORKID (0x41), which is required for BSV.
+The script reads the WIF from stdin (avoids shell history). It uses `@noble/curves/secp256k1` for BIP143 signing with SIGHASH_FORKID (0x41), which is required for BSV.
 
-The signed transaction hex is printed to stdout and can be broadcast via any BSV node, WhatsOnChain, or ElectrumSV.
+**Optional:** if you enter ElectrumSV xpub/derivation in the UTXO form, an Electrum-specific incomplete JSON export appears under a collapsible section. Do **not** paste raw unsigned hex into ElectrumSV — empty scriptSig is valid unsigned format, but many wallets treat plain hex as already signed.
 
-**Security note:** Never paste a WIF key directly into a browser. The CLI signing tool is explicitly designed to keep key material outside the browser context entirely.
+**Security note:** Never paste a WIF into the main editor publish flow. Use `sign.html` (separate page) or the CLI tool so key material stays out of the publish UI.
 
 ---
 
 ## Testing
 
 ```bash
-npm test                   # 313 unit tests (Vitest)
+npm test                   # 328 unit tests (Vitest)
 npm run test:watch         # watch mode
 npm run test:coverage      # coverage report
-npm run typecheck          # tsc --noEmit (zero errors)
+npm run typecheck          # tsc --noEmit (core)
+npm run editor:typecheck   # tsc --noEmit (editor)
 
-npm run e2e                # 20 Playwright E2E tests (full publish flow)
+npm run e2e                # 20 Playwright E2E tests (editor publish flow)
 npm run generate-vectors   # regenerate src/test-vectors/vectors.json
 ```
 
-### Test coverage
+### Test coverage (representative)
 
 | Area | Tests | What is covered |
 |---|---|---|
-| Hash (`src/core/hash.ts`) | 18 | Domain-separated SHA-256, leaf vs. interior-node prefixes |
-| Merkle (`src/core/merkle.ts`) | 24 | Tree construction, odd-level duplicate rule, root verification |
-| Chunker (`src/core/chunker.ts`) | 16 | Fixed-size splitting, final chunk true length, determinism |
-| Manifest (`src/core/manifest.ts`) | 22 | Builder, strict validator, required fields, schema |
-| Transaction builder (`src/tx/`) | 8 | Unsigned chunk tx, unsigned anchor tx, fee estimation, receipt |
-| Renderer (`src/renderer/`) | 27 | Sanitize, EXIF strip, PDF strip, ZIP, hash verification, handler |
-| Chain source (`src/chain/`) | 6 | TxChunkSource, payload decoding |
-| Editor Markdown | 15 | Markdown render, sanitization |
-| E2E (`tests/e2e/`) | 20 | Full publish flow IDLE→RECEIPT, MIME detection, guide panel, privacy leak detection |
+| Hash / Merkle / Chunker | 41 | Domain-separated SHA-256, Merkle tree, chunk splitting |
+| Manifest | 32 | Builder, strict validator, required fields |
+| Transaction (`tests/tx/`) | 83 | Builder, encoding, fees, sign bundle, raw tx, script |
+| Renderer (`tests/renderer/`) | 72 | Sanitize, PDF strip, handler, markdown serve, integration |
+| Chain | 13 | WoC reader, TxChunkSource |
+| Editor | 23 | Markdown, publish, MIME/zip |
+| Indexer + vectors | 30 | Scan, API, committed hash vectors |
+| E2E (`tests/e2e/`) | 20 | IDLE→RECEIPT flow, privacy invariants, guide panel |
 
 ### Test vectors
 
@@ -451,7 +485,7 @@ If the generated file differs from the committed one, the implementation has div
 
 ## Protocol Specification
 
-The full protocol specification is in [`SPEC.md`](SPEC.md) (30 sections, ~1,100 lines). Key sections:
+The full protocol specification is in [`SPEC.md`](SPEC.md) (30 sections, ~1,100 lines). The reference renderer implements **`GET /tx/<anchor-txid>`** only; manifest-hash lookup is described in the spec for optional indexers and future renderers.
 
 | Section | Topic |
 |---|---|
@@ -481,11 +515,11 @@ These seven constraints hold in every layer and every future version. Violation 
 
 4. **Renderer refuses unverified content** — if any chunk hash fails or the Merkle root mismatches, the renderer returns a 422 and a clean error page. It never renders partially verified content.
 
-5. **Document metadata stripped locally before hashing** — PDF `/Info` dictionary, JPEG/PNG EXIF, Office document metadata are stripped in the client before the content is hashed and manifested.
+5. **Document metadata stripped locally before hashing** — JPEG/PNG EXIF and PDF `/Info` metadata are stripped in the client before hashing. Office and other formats are **not** stripped automatically; the REVIEW step warns you to use ExifTool manually.
 
 6. **Platform never custodies funds** — the authoring client never holds funds. The operator never pays for user publications. Each author pays their own fees from their own wallet.
 
-7. **Transaction constructor is wallet-agnostic** — the unsigned tx output format (`{hex, inputs: [{outpoint, satoshis, lockingScript}]}`) is compatible with any BSV wallet. The protocol does not require one SDK or one wallet provider.
+7. **Transaction constructor is wallet-agnostic** — exports include a sign bundle (`samizdat-sign-bundle` JSON with hex + per-input metadata) compatible with `sign.html`, the CLI signer, or any external wallet. Optional ElectrumSV JSON is provided when xpub/derivation is supplied.
 
 ---
 
@@ -498,7 +532,7 @@ SAMIZDAT explicitly considers the following adversaries:
 - **Malicious hosting operators** — mitigated by content-addressed verification (every byte is hashed before rendering)
 - **Malicious indexers** — mitigated by non-canonical status (`"canonical": false` on all results)
 - **Chain reorganization** — acknowledged; the protocol notes txids and block heights; manifests survive reorgs as long as the data remains retrievable
-- **Metadata deanonymization** — mitigated by mandatory EXIF/PDF stripping and privacy warnings in the REVIEW step
+- **Metadata deanonymization** — mitigated by automatic EXIF/PDF stripping, manual Office warnings, and privacy checklist in the REVIEW step
 - **Fee manipulation** — mitigated by fee estimation displayed before confirmation; author controls their own UTXO
 - **Malformed manifests** — mitigated by strict validator that rejects manifests with missing mandatory fields
 
@@ -518,39 +552,41 @@ A manifest is a JSON object. All mandatory fields must be present; the validator
 
 ```jsonc
 {
-  "version": 1,
+  "version": "1",
   "authorMode": "anonymous",        // "anonymous" | "pseudonymous" | "signed"
-  "publicationMode": "on-chain",    // "on-chain" | "hybrid"
+  "publicationMode": "onchain",      // "onchain" | "hybrid"
   "fileTree": [
     {
-      "name": "article.md",
+      "filename": "article.md",
       "contentType": "text/markdown",
       "size": 4096,
-      "sha256": "e3b0c44298fc1c149afb...",
-      "chunkRefs": [0, 1]
+      "hash": "e3b0c44298fc1c149afb...",   // SHA-256 of full file bytes (pre-chunking)
+      "chunks": [
+        { "index": 0, "size": 3717, "hash": "a665a45920422f9d417e..." },
+        { "index": 1, "size": 379,  "hash": "b94f6f125c79e3..." }
+      ]
     }
   ],
   "chunkTree": [
     {
       "index": 0,
-      "size": 65536,
+      "size": 3717,
       "hash": "a665a45920422f9d417e..."
     },
     {
       "index": 1,
-      "size": 3821,           // true byte length — final chunk is never padded
+      "size": 379,              // true byte length — final chunk is never padded
       "hash": "b94f6f125c79e3..."
     }
   ],
-  "rootHash": "3fdba35f04dc8c462986...",   // Merkle root over all chunk hashes
-  "txidAnchor": "f4184fc596403b9d638...",  // set after anchor broadcast
-  // Optional fields:
+  "rootHash": "3fdba35f04dc8c462986...",   // Merkle root over all chunkTree leaf hashes
+  // Optional fields (set after anchor broadcast):
+  "txidAnchor": "f4184fc596403b9d638...",
   "title": "On Censorship Resistance",
   "subtitle": "A technical analysis",
   "tags": ["privacy", "bsv", "protocol"],
   "language": "en",
   "createdAt": "2026-06-26T00:00:00Z",
-  "expiry": null,
   "previousManifest": null,
   "rendererHints": {}
 }
@@ -598,21 +634,21 @@ Full encoding details: [`docs/bsv-integration.md`](docs/bsv-integration.md).
 A reader verifying a published document:
 
 ```
-1. Obtain the anchor txid or manifest hash
-2. Renderer fetches the anchor tx from BSV chain
-3. Renderer decodes the payload: extracts manifest hash + root hash
-4. Renderer fetches the manifest (from chain or mirror)
-5. Renderer validates manifest schema (strict validator)
-6. For each chunk reference in the manifest:
-   a. Fetch chunk data from available source
+1. Obtain the anchor txid (from the publication receipt)
+2. Open GET /tx/<anchor-txid> on a compatible renderer
+3. Renderer fetches the anchor tx from the BSV chain
+4. Renderer decodes the SMZD blob: manifest hash, root hash, chunk txids, embedded manifest
+5. Renderer validates manifest schema and checks embedded manifest hash
+6. For each chunk in manifest.chunkTree order:
+   a. Fetch chunk tx using txid from anchor payload
    b. verifyChunkData(chunk.data, chunk.hash) — must pass
-7. verifyMerkleRoot(chunk_hashes, manifest.rootHash) — must pass
+7. verifyMerkleRoot(manifest) — must pass
 8. Reconstruct file tree from verified chunks
-9. Sanitize HTML / strip EXIF / serve PDF as attachment
-10. Present content with a verified badge
+9. Sanitize HTML / render markdown / strip EXIF / serve PDF as attachment
+10. Serve content on success, or return 422 with an error page on any failure
 ```
 
-If any step from 6 onward fails, the renderer returns a `422 Unverifiable Content` response. It never presents partially verified content as verified.
+If any verification step fails, the renderer returns **422 Unverified Content**. It never presents partially verified content.
 
 ---
 

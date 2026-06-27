@@ -1,5 +1,5 @@
 // Stateless manifest resolver.
-// Given a txid (anchor tx) or manifest hash, fetches and validates the manifest.
+// Given an anchor txid, fetches and validates the manifest from chain.
 
 import type { Manifest } from '../core/types';
 import type { ChainReader } from './chain';
