@@ -17,6 +17,7 @@ import type { Utxo } from '@samizdat/tx/types';
 import { markdownToHtml } from './markdown';
 import { sanitizeHtml } from '@samizdat/renderer/sanitize';
 import { renderGuide, SAMPLE_MARKDOWN } from './guide';
+import { stashSignBundle } from './sign-storage';
 let state: EditorState = initialState();
 let guideOpen = false;
 
@@ -417,9 +418,9 @@ function renderExportChunks(): string {
       <div class="sz-section-body">
 
         <div class="sz-warn-block sz-mb">
-          <div class="sz-warn"><span class="sz-warn-label">ElectrumSV</span>: copy the JSON below (not raw hex). In ElectrumSV: Tools → Load Transaction → paste. Status should show <strong>Unsigned</strong> with a Sign button.</div>
-          <div class="sz-warn"><span class="sz-warn-label">CLI</span>: use the raw hex with <code style="font-family:var(--sz-font-data);font-size:0.85em">scripts/sign-tx.ts</code> if you prefer offline WIF signing.</div>
-          <div class="sz-warn"><span class="sz-warn-label">Order</span>: chunk transactions must be broadcast before the anchor transaction. do not skip steps.</div>
+          <div class="sz-warn"><span class="sz-warn-label">Unsigned format</span>: copy the <strong>sign bundle</strong> below. It is marked <code>"unsigned": true</code> and includes the input data any signer needs. Do <em>not</em> paste raw hex into a wallet — empty scriptSig looks &ldquo;already signed&rdquo; to ElectrumSV and others.</div>
+          <div class="sz-warn"><span class="sz-warn-label">Sign</span>: open <a href="sign.html" target="_blank" rel="noopener" style="color:var(--sz-accent)">sign.html</a> (offline signer), paste the bundle and your WIF, then broadcast the signed hex. Or use <code style="font-family:var(--sz-font-data);font-size:0.85em">scripts/sign-tx.ts</code> with the raw hex from the bundle.</div>
+          <div class="sz-warn"><span class="sz-warn-label">Order</span>: chunk transactions must be broadcast before the anchor transaction.</div>
         </div>
 
         ${state.chunkBundles.map(b => `
@@ -429,9 +430,22 @@ function renderExportChunks(): string {
               &mdash; est. fee ${formatSatoshis(b.feeEstimateSats)}
             </span>
             <div class="sz-copy-wrap">
-              <div class="sz-hex-block" id="chunk-hex-${b.index}">${esc(b.electrumJsonTx)}</div>
-              <button class="sz-btn sz-btn-secondary sz-btn-copy" data-copy="${b.index}">COPY</button>
+              <div class="sz-hex-block" id="chunk-bundle-${b.index}">${esc(b.signBundleJson)}</div>
+              <button class="sz-btn sz-btn-secondary sz-btn-copy" data-copy="bundle-${b.index}">COPY BUNDLE</button>
+              <button class="sz-btn sz-btn-secondary sz-btn-sign" data-sign="${b.index}">OPEN SIGNER</button>
             </div>
+            ${b.electrumJsonTx ? `
+              <details class="sz-details sz-mt-sm">
+                <summary class="sz-details-summary" style="font-size:0.875rem">ElectrumSV export (optional)</summary>
+                <div class="sz-details-body">
+                  <div class="sz-field-hint sz-mb">Wallet-specific JSON — only if you added xpub/derivation in the UTXO form.</div>
+                  <div class="sz-copy-wrap">
+                    <div class="sz-hex-block">${esc(b.electrumJsonTx)}</div>
+                    <button class="sz-btn sz-btn-secondary sz-btn-copy" data-copy="electrum-${b.index}">COPY</button>
+                  </div>
+                </div>
+              </details>
+            ` : ''}
           </div>
         `).join('')}
 
@@ -546,13 +560,29 @@ function renderExportAnchor(): string {
           <div style="color:var(--sz-ink);font-size:0.9375rem;margin-top:0.2rem">${formatSatoshis(state.anchorFee)}</div>
         </div>
 
+        <div class="sz-warn-block sz-mb">
+          <div class="sz-warn"><span class="sz-warn-label">Sign</span>: use the sign bundle with <a href="sign.html" target="_blank" rel="noopener" style="color:var(--sz-accent)">sign.html</a> or <code style="font-family:var(--sz-font-data);font-size:0.85em">scripts/sign-tx.ts</code>. Do not paste raw unsigned hex into a wallet.</div>
+        </div>
+
         <div class="sz-mb sz-mt">
-          <span class="sz-data-label">ElectrumSV unsigned transaction (JSON)</span>
+          <span class="sz-data-label">Sign bundle (unsigned)</span>
           <div class="sz-copy-wrap">
-            <div class="sz-hex-block" id="anchor-hex-block">${esc(state.anchorElectrumJsonTx)}</div>
-            <button class="sz-btn sz-btn-secondary sz-btn-copy" data-copy="anchor">COPY</button>
+            <div class="sz-hex-block" id="anchor-bundle-block">${esc(state.anchorSignBundleJson)}</div>
+            <button class="sz-btn sz-btn-secondary sz-btn-copy" data-copy="anchor-bundle">COPY BUNDLE</button>
+            <button class="sz-btn sz-btn-secondary" id="anchor-open-signer">OPEN SIGNER</button>
           </div>
         </div>
+        ${state.anchorElectrumJsonTx ? `
+        <details class="sz-details sz-mb">
+          <summary class="sz-details-summary">ElectrumSV export (optional)</summary>
+          <div class="sz-details-body">
+            <div class="sz-copy-wrap">
+              <div class="sz-hex-block">${esc(state.anchorElectrumJsonTx)}</div>
+              <button class="sz-btn sz-btn-secondary sz-btn-copy" data-copy="anchor-electrum">COPY</button>
+            </div>
+          </div>
+        </details>
+        ` : ''}
 
         <div class="sz-btn-row">
           <button class="sz-btn sz-btn-primary" id="next-anchor-txid-btn">I have broadcast the anchor &rarr;</button>
@@ -722,17 +752,32 @@ function attachHandlers(): void {
     btn.addEventListener('click', () => {
       const id = btn.dataset['copy']!;
       let text = '';
-      if (id === 'anchor')  text = state.anchorElectrumJsonTx;
+      if (id === 'anchor-bundle') text = state.anchorSignBundleJson;
+      else if (id === 'anchor-electrum') text = state.anchorElectrumJsonTx ?? '';
       else if (id === 'receipt') text = q<HTMLElement>('#receipt-json').textContent ?? '';
-      else {
-        const idx = parseInt(id);
+      else if (id.startsWith('bundle-')) {
+        const idx = parseInt(id.slice('bundle-'.length), 10);
+        text = state.chunkBundles[idx]?.signBundleJson ?? '';
+      } else if (id.startsWith('electrum-')) {
+        const idx = parseInt(id.slice('electrum-'.length), 10);
         text = state.chunkBundles[idx]?.electrumJsonTx ?? '';
       }
       navigator.clipboard.writeText(text).then(() => {
         btn.textContent = 'COPIED';
-        setTimeout(() => { btn.textContent = 'COPY'; }, 1500);
+        setTimeout(() => { btn.textContent = id.includes('bundle') || id === 'anchor-bundle' ? 'COPY BUNDLE' : 'COPY'; }, 1500);
       });
     });
+  });
+
+  document.querySelectorAll<HTMLElement>('.sz-btn-sign').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset['sign']!, 10);
+      const bundle = state.chunkBundles[idx]?.signBundleJson ?? '';
+      openSignerWithBundle(bundle);
+    });
+  });
+  document.getElementById('anchor-open-signer')?.addEventListener('click', () => {
+    openSignerWithBundle(state.anchorSignBundleJson);
   });
 
   const on = (id: string, ev: string, fn: (e: Event) => void): void => {
@@ -909,6 +954,7 @@ function attachHandlers(): void {
           state.anchorUtxo = utxo;
           const result = await buildAnchorTransaction(state.manifest!, state.chunkTxids, utxo);
           state.anchorHexTx  = result.anchorHexTx;
+          state.anchorSignBundleJson = result.anchorSignBundleJson;
           state.anchorElectrumJsonTx = result.anchorElectrumJsonTx;
           state.anchorFee    = result.anchorFee;
         });
@@ -1087,6 +1133,12 @@ function parseUtxo(
   return utxo;
 }
 
+function openSignerWithBundle(bundleJson: string): void {
+  if (!bundleJson) return;
+  stashSignBundle(bundleJson);
+  window.open('sign.html', '_blank', 'noopener');
+}
+
 function utxoForm(idPrefix: string, label: string, hint: string): string {
   return `
     <details class="sz-details" id="${idPrefix}-details">
@@ -1120,9 +1172,9 @@ function utxoForm(idPrefix: string, label: string, hint: string): string {
           <div class="sz-field-hint">How to unlock this output — for a standard BSV address, always starts with 76a914 and ends with 88ac (50 hex chars total). In ElectrumSV: View → Coins → right-click row → Copy script pubkey.</div>
         </div>
         <div class="sz-form-row">
-          <label>ElectrumSV xpub <span style="color:var(--sz-faded);font-weight:normal">(optional — enables Sign)</span></label>
+          <label>ElectrumSV xpub <span style="color:var(--sz-faded);font-weight:normal">(optional)</span></label>
           <input type="text" id="${idPrefix}-xpub" class="is-data" placeholder="xpub6…">
-          <div class="sz-field-hint">Account extended public key. In ElectrumSV: Wallet → Account → Information → Master Public Keys.</div>
+          <div class="sz-field-hint">Only needed for optional ElectrumSV JSON export. Use the sign bundle + sign.html instead.</div>
         </div>
         <div class="sz-form-row">
           <label>Derivation path <span style="color:var(--sz-faded);font-weight:normal">(optional)</span></label>

@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 // Import directly from the editor source — no build step needed for tests
 // because Vitest resolves path aliases from the tsconfig.
 // Note: editor/ has its own tsconfig so we reference the file directly.
-import { markdownToHtml } from '../../editor/src/markdown';
+import { markdownToHtml } from '../../src/renderer/markdown';
 
 describe('markdownToHtml', () => {
   it('renders h1', () => {

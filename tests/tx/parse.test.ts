@@ -4,7 +4,7 @@ import { toHex } from '../../src/core/hash';
 import { parseRawTx, validateRawTxHex } from '../../src/tx/parse';
 import { buildManifest } from '../../src/core/manifest';
 import { buildChunkTxs } from '../../src/tx/builder';
-import type { Utxo } from '../../src/tx/types';
+import { makeTestUtxo } from './test-utxo';
 
 const DUMMY_TXID = '0000000000000000000000000000000000000000000000000000000000000001';
 
@@ -41,7 +41,7 @@ describe('parseRawTx', () => {
 });
 
 describe('parseRawTx on built chunk transactions', () => {
-  const utxo: Utxo = {
+  const utxo = {
     txid: '2f7597dbcec311735910b5557837b6eb5038df6dbcced344e327aa03c3425265',
     vout: 0,
     satoshis: 5000n,

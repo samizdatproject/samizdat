@@ -382,21 +382,11 @@ async function main(): Promise<void> {
 
   for (let i = 0; i < parsed.inputs.length; i++) {
     const sighash = computeSighash(parsed, i, subscript, utxoSats);
-    const sig = secp256k1.sign(sighash, privKey, { lowS: true });
-
-    // Convert r and s bigints to 32-byte big-endian arrays
-    const rBytes = new Uint8Array(32);
-    const sBytes = new Uint8Array(32);
-    let rBig = sig.r;
-    let sBig = sig.s;
-    for (let j = 31; j >= 0; j--) {
-      rBytes[j] = Number(rBig & 0xffn);
-      rBig >>= 8n;
-      sBytes[j] = Number(sBig & 0xffn);
-      sBig >>= 8n;
-    }
-
-    const derSig = derEncode(rBytes, sBytes);
+    const derSig = secp256k1.sign(sighash, privKey, {
+      lowS: true,
+      prehash: false,
+      format: 'der',
+    });
     const scriptSig = buildP2PKHScriptSig(derSig, SIGHASH_ALL_FORKID, pubKey);
     signedScriptSigs.push(scriptSig);
   }

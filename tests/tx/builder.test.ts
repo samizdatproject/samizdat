@@ -2,19 +2,21 @@ import { describe, it, expect } from 'vitest';
 import { buildChunkTxs, buildAnchorTx } from '../../src/tx/builder';
 import { buildManifest } from '../../src/core/manifest';
 import { chunkData } from '../../src/core/chunker';
-import type { Utxo } from '../../src/tx/types';
+import { makeTestUtxo } from './test-utxo';
 
 const FAKE_TXID = 'a'.repeat(64);
-const FAKE_PUBKEY_HASH = 'b'.repeat(40);
-const FAKE_LOCKING_SCRIPT = '76a914' + FAKE_PUBKEY_HASH + '88ac';
 
-function makeUtxo(satoshis = 100_000_000n): Utxo {
+function makeUtxo(satoshis = 100_000_000n) {
+  return makeTestUtxo({ txid: FAKE_TXID, satoshis });
+}
+
+function makeUtxoPlain(satoshis = 100_000_000n) {
   return {
     txid: FAKE_TXID,
     vout: 0,
     satoshis,
-    lockingScriptHex: FAKE_LOCKING_SCRIPT,
-    pubKeyHashHex: FAKE_PUBKEY_HASH,
+    lockingScriptHex: '76a914' + 'b'.repeat(40) + '88ac',
+    pubKeyHashHex: 'b'.repeat(40),
   };
 }
 
@@ -35,8 +37,10 @@ describe('buildChunkTxs', () => {
     expect(bundles).toHaveLength(1);
     expect(typeof bundles[0]!.hexTx).toBe('string');
     expect(bundles[0]!.hexTx.length).toBeGreaterThan(0);
-    expect(typeof bundles[0]!.electrumJsonTx).toBe('string');
-    expect(JSON.parse(bundles[0]!.electrumJsonTx).complete).toBe(false);
+    expect(typeof bundles[0]!.signBundleJson).toBe('string');
+    expect(JSON.parse(bundles[0]!.signBundleJson).unsigned).toBe(true);
+    expect(bundles[0]!.electrumJsonTx).not.toBeNull();
+    expect(JSON.parse(bundles[0]!.electrumJsonTx!).complete).toBe(false);
     expect(bundles[0]!.signerInputs).toHaveLength(1);
     expect(bundles[0]!.feeEstimateSats).toBeGreaterThan(0n);
   });
@@ -58,6 +62,14 @@ describe('buildChunkTxs', () => {
     );
   });
 
+  it('omits ElectrumSV JSON when wallet metadata is absent', async () => {
+    const content = new Uint8Array(500).fill(0x41);
+    const { manifest } = await makeManifestAndChunks(content);
+    const bundles = await buildChunkTxs(manifest, [content], makeUtxoPlain());
+    expect(bundles[0]!.electrumJsonTx).toBeNull();
+    expect(JSON.parse(bundles[0]!.signBundleJson).unsigned).toBe(true);
+  });
+
   it('each bundle description mentions chunk index', async () => {
     const content = new Uint8Array(500).fill(0x41);
     const { manifest } = await makeManifestAndChunks(content);
@@ -75,7 +87,8 @@ describe('buildAnchorTx', () => {
 
     expect(typeof bundle.hexTx).toBe('string');
     expect(bundle.hexTx.length).toBeGreaterThan(0);
-    expect(JSON.parse(bundle.electrumJsonTx).complete).toBe(false);
+    expect(JSON.parse(bundle.signBundleJson).unsigned).toBe(true);
+    expect(bundle.electrumJsonTx).not.toBeNull();
     expect(bundle.signerInputs).toHaveLength(1);
     expect(bundle.feeEstimateSats).toBeGreaterThan(0n);
   });

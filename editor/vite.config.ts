@@ -24,9 +24,13 @@ export default defineConfig({
     emptyOutDir: true,
     assetsInlineLimit: 1024 * 1024 * 10,
     rollupOptions: {
+      input: {
+        index: resolve(__dirname, 'index.html'),
+        sign: resolve(__dirname, 'sign.html'),
+      },
       output: {
         manualChunks: undefined,
-        entryFileNames: 'app.js',
+        entryFileNames: (chunk) => (chunk.name === 'index' ? 'app.js' : `${chunk.name}.js`),
         assetFileNames: '[name][extname]',
       },
     },

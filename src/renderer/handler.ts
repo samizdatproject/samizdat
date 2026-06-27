@@ -7,6 +7,7 @@ import { resolveManifest } from './resolver';
 import { fetchAndVerifyChunks } from './fetcher';
 import { reconstructFiles, type ReconstructedFile } from './reconstruct';
 import { sanitizeHtml, stripExif } from './sanitize';
+import { markdownToHtml } from './markdown';
 import { buildZip } from './zip';
 import { verifyMerkleRoot } from '../core/manifest';
 import { RendererError } from './errors';
@@ -49,14 +50,18 @@ export async function handleRenderRequest(
   chunkTxids?: string[],
 ): Promise<RendererResponse> {
   try {
-    const { manifest } = await resolveManifest(txid, chain);
+    const { manifest, chunkTxids: anchorChunkTxids } = await resolveManifest(txid, chain);
 
     const rootOk = await verifyMerkleRoot(manifest);
     if (!rootOk) {
       return unverifiedResponse('Merkle root verification failed: chunk tree is inconsistent');
     }
 
-    const verifiedChunks = await fetchAndVerifyChunks(manifest, source, chunkTxids);
+    const verifiedChunks = await fetchAndVerifyChunks(
+      manifest,
+      source,
+      chunkTxids ?? anchorChunkTxids,
+    );
     const files = await reconstructFiles(manifest, verifiedChunks);
 
     return serveFiles(files);
@@ -91,8 +96,9 @@ function serveSingle(file: ReconstructedFile): RendererResponse {
   const { filename, contentType, data } = file;
   const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 
-  if (contentType === 'text/html') {
-    const html = new TextDecoder().decode(data);
+  if (contentType === 'text/html' || contentType === 'text/markdown') {
+    const raw = new TextDecoder().decode(data);
+    const html = contentType === 'text/markdown' ? markdownToHtml(raw) : raw;
     const safeHtml = sanitizeHtml(html);
     return {
       status: 200,

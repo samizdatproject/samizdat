@@ -1,5 +1,5 @@
 // End-to-end test: buildManifest → buildChunkTxs → (mock sign) → buildAnchorTx → buildReceipt
-// Tests the full SAMIZDAT fail-safe publish ordering from KICKOFF.md.
+// Tests the full SAMIZDAT fail-safe publish ordering.
 
 import { describe, it, expect } from 'vitest';
 import { buildManifest, verifyChunkData } from '../../src/core/manifest';
@@ -7,20 +7,13 @@ import { buildChunkTxs, buildAnchorTx } from '../../src/tx/builder';
 import { estimateChunkTxBytes } from '../../src/tx/fees';
 import { buildReceipt } from '../../src/tx/receipt';
 import { encodeChunkPayload, encodeAnchorPayload, decodeChunkPayload, decodeAnchorPayload } from '../../src/tx/encoding';
-import type { Utxo } from '../../src/tx/types';
+import { makeTestUtxo } from './test-utxo';
 
 const MOCK_CHUNK_TXID = '1'.repeat(64);
 const MOCK_ANCHOR_TXID = '2'.repeat(64);
 
-function makeUtxo(): Utxo {
-  const pubKeyHashHex = 'ab'.repeat(20);
-  return {
-    txid: '0'.repeat(64),
-    vout: 0,
-    satoshis: 100_000_000n,
-    lockingScriptHex: '76a914' + pubKeyHashHex + '88ac',
-    pubKeyHashHex,
-  };
+function makeUtxo() {
+  return makeTestUtxo({ txid: '0'.repeat(64) });
 }
 
 describe('full publish flow integration', () => {

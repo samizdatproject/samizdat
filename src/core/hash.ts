@@ -1,6 +1,6 @@
 // Domain-separation prefixes for second-preimage resistance.
 // Leaf nodes and interior nodes use distinct prefixes so a leaf hash can never
-// be confused with an interior-node hash, and vice versa. See KICKOFF.md.
+// be confused with an interior-node hash, and vice versa.
 const enc = new TextEncoder();
 const LEAF_PREFIX = enc.encode('SAMIZDAT_LEAF_1:');
 const NODE_PREFIX = enc.encode('SAMIZDAT_NODE_1:');

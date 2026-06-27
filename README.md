@@ -243,12 +243,8 @@ samizdat/
 ├── docs/
 │   ├── deployment.md       # Onion + clearnet + private node guides
 │   ├── opsec-guide.md      # Operational security for authors
-│   ├── security-audit.md   # Security audit — all 7 hard rules verified
-│   ├── tor-browser-test.md # Manual Tor Browser test checklist
 │   └── bsv-integration.md  # BSV transaction encoding details
 ├── SPEC.md                 # Full protocol specification (30 sections)
-├── KICKOFF.md              # Implementation decisions log
-├── GOAL.md                 # Completion criteria (all satisfied)
 └── DONATE.md               # Donation addresses
 ```
 

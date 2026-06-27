@@ -6,7 +6,7 @@ import { hashNode, fromHex } from './hash';
 // domain-separated with SAMIZDAT_LEAF_1:. Interior nodes are combined with hashNode()
 // (domain-separated with SAMIZDAT_NODE_1:), preventing second-preimage attacks.
 //
-// Odd-level rule (KICKOFF.md): when a level has an odd number of nodes, the last
+// Odd-level rule: when a level has an odd number of nodes, the last
 // node is duplicated to form a pair. This rule applies at every level, not just the
 // leaf level.
 export async function computeMerkleRoot(leafHashes: Uint8Array[]): Promise<Uint8Array> {

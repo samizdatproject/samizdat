@@ -14,5 +14,5 @@
       "@samizdat/*": ["../src/*"]
     }
   },
-  "include": ["src/**/*.ts", "vite.config.ts"]
+  "include": ["src/**/*.ts", "vite.config.ts", "vite-env.d.ts"]
 }

@@ -28,7 +28,8 @@ export interface BuildTxsResult {
 
 export interface BuildAnchorResult {
   anchorHexTx: string;
-  anchorElectrumJsonTx: string;
+  anchorSignBundleJson: string;
+  anchorElectrumJsonTx: string | null;
   anchorFee: bigint;
 }
 
@@ -122,6 +123,7 @@ export async function buildChunkTransactions(
   const chunkBundles: ChunkBundle[] = bundles.map((b, i) => ({
     index: i,
     hexTx: b.hexTx,
+    signBundleJson: b.signBundleJson,
     electrumJsonTx: b.electrumJsonTx,
     feeEstimateSats: b.feeEstimateSats,
   }));
@@ -136,6 +138,7 @@ export async function buildAnchorTransaction(
   const bundle = await buildAnchorTx(manifest, chunkTxids, utxo);
   return {
     anchorHexTx: bundle.hexTx,
+    anchorSignBundleJson: bundle.signBundleJson,
     anchorElectrumJsonTx: bundle.electrumJsonTx,
     anchorFee: bundle.feeEstimateSats,
   };
@@ -197,6 +200,7 @@ function extractChunkPayload(txBytes: Uint8Array, _chunkIndex: number): Uint8Arr
   return null;
 }
 
+// Mock UTXO for building transactions (user provides their own UTXO in practice)
 // Mock UTXO for building transactions (user provides their own UTXO in practice)
 export function makeMockUtxo(satoshis: bigint = 100_000_000n): Utxo {
   return {

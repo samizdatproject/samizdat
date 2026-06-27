@@ -5,13 +5,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildManifest, hashManifest, verifyMerkleRoot } from '../../src/core/manifest';
 import * as manifestModule from '../../src/core/manifest';
-import { encodeAnchorPayload } from '../../src/tx/encoding';
+import { encodeAnchorPayload, encodeChunkPayload } from '../../src/tx/encoding';
 import { CHUNK_SIZE_MIN } from '../../src/core/chunker';
 import { resolveManifest } from '../../src/renderer/resolver';
 import { fetchAndVerifyChunks } from '../../src/renderer/fetcher';
 import { reconstructFiles } from '../../src/renderer/reconstruct';
 import { handleRenderRequest } from '../../src/renderer/handler';
 import { MockChainReader, MockChunkSource } from '../../src/renderer/chain';
+import { TxChunkSource } from '../../src/chain/tx-chunk-source';
 
 const ANCHOR_TXID = 'c'.repeat(64);
 
@@ -63,6 +64,42 @@ describe('renderer integration', () => {
     expect(response.headers['Content-Type']).toContain('text/plain');
     expect(response.headers['Content-Security-Policy']).toContain("script-src 'none'");
     expect(new TextDecoder().decode(response.body)).toBe('plain text content');
+  });
+
+  it('handleRenderRequest uses chunk txids from anchor when using TxChunkSource', async () => {
+    const content = new TextEncoder().encode('on-chain chunk via anchor txids');
+    const { manifest, chunks } = await buildManifest([
+      { filename: 'note.txt', contentType: 'text/plain', data: content },
+    ]);
+    const manifestHash = await hashManifest(manifest);
+    const chunkTxid = 'd'.repeat(64);
+    const script = encodeAnchorPayload(manifestHash, manifest.rootHash, [chunkTxid], manifest);
+
+    const chain = new MockChainReader()
+      .add(ANCHOR_TXID, script)
+      .add(chunkTxid, encodeChunkPayload(0, chunks[0]!.data));
+    const source = new TxChunkSource(chain);
+
+    const response = await handleRenderRequest(ANCHOR_TXID, chain, source);
+
+    expect(response.status).toBe(200);
+    expect(new TextDecoder().decode(response.body)).toBe('on-chain chunk via anchor txids');
+  });
+
+  it('handleRenderRequest renders markdown as HTML', async () => {
+    const md = '# Title\n\n**bold** paragraph with `code`.';
+    const content = new TextEncoder().encode(md);
+    const { chain, source } = await setupRenderer(content, 'article.md', 'text/markdown');
+
+    const response = await handleRenderRequest(ANCHOR_TXID, chain, source);
+
+    const body = new TextDecoder().decode(response.body);
+    expect(response.status).toBe(200);
+    expect(response.headers['Content-Type']).toContain('text/html');
+    expect(body).toContain('<h1>Title</h1>');
+    expect(body).toContain('<strong>bold</strong>');
+    expect(body).toContain('<code>code</code>');
+    expect(body).not.toContain('# Title');
   });
 
   it('handleRenderRequest serves HTML through the sanitizer', async () => {

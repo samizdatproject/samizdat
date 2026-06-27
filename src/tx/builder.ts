@@ -1,5 +1,5 @@
 // High-level SAMIZDAT transaction builders.
-// Enforces the fail-safe publish ordering from KICKOFF.md:
+// Enforces the fail-safe publish ordering:
 //   chunk txs → author signs/broadcasts → verify chunk hashes → anchor tx
 //
 // These functions produce unsigned transactions only. Authors sign externally.
@@ -19,7 +19,8 @@ import {
 import { toHex, fromHex } from '../core/hash';
 import { hashManifest } from '../core/manifest';
 import { validateRawTxHex } from './parse';
-import { buildElectrumIncompleteFromBundle } from './electrum';
+import { tryBuildElectrumIncompleteFromBundle } from './electrum';
+import { buildSignBundle } from './sign-bundle';
 
 function scriptToHex(script: Uint8Array): string {
   return toHex(script);
@@ -39,12 +40,16 @@ function bundleFromRawTx(
     satoshis: utxo.satoshis,
     lockingScriptHex: utxo.lockingScriptHex,
   }];
-  return {
+  const partial: Omit<UnsignedTxBundle, 'electrumJsonTx' | 'signBundleJson'> = {
     hexTx,
-    electrumJsonTx: buildElectrumIncompleteFromBundle(hexTx, signerInputs, utxo),
     signerInputs,
     feeEstimateSats: feeEstimate,
     description,
+  };
+  return {
+    ...partial,
+    signBundleJson: buildSignBundle(partial),
+    electrumJsonTx: tryBuildElectrumIncompleteFromBundle(hexTx, signerInputs, utxo),
   };
 }
 

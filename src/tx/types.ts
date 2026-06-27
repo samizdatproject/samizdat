@@ -23,11 +23,12 @@ export interface SignerInput {
 
 // An unsigned transaction plus all signing metadata for the external wallet.
 export interface UnsignedTxBundle {
-  hexTx: string;                  // hex of the serialised unsigned transaction (CLI / broadcast)
-  electrumJsonTx: string;           // ElectrumSV incomplete JSON (paste in Load Transaction)
+  hexTx: string;                    // standard unsigned wire hex (empty scriptSig)
+  signBundleJson: string;           // wallet-agnostic JSON with unsigned: true + signer inputs
+  electrumJsonTx: string | null;    // optional ElectrumSV incomplete JSON (wallet-specific)
   signerInputs: SignerInput[];
   feeEstimateSats: bigint;
-  description: string;            // human-readable label for the UI
+  description: string;
 }
 
 // The decoded payload from an anchor transaction output script.

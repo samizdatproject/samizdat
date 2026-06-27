@@ -101,16 +101,17 @@ Authoring client → Chunking engine → Your wallet signs → BSV anchor → Re
 
 ---
 
-## Signing with ElectrumSV
+## Signing your transaction
 
 After the editor builds your transactions:
 
-1. Copy the **JSON** from the export step (not raw hex — ElectrumSV treats plain hex as already signed).
-2. **Tools → Load Transaction** → paste → status should show **Unsigned**.
-3. Click **Sign** (add your account xpub and derivation path in the UTXO form if Sign is disabled).
-4. **Broadcast** → copy the returned **txid** back into the editor.
+1. Copy the **sign bundle** from the export step — it is JSON marked unsigned: true with the input data any signer needs.
+2. Open **sign.html** (linked from the export step), paste the bundle and your WIF, click Sign.
+3. Broadcast the signed hex via any BSV tool, then paste the **txid** back into the editor.
 
-Alternatively, sign offline with scripts/sign-tx.ts and a WIF key — no network required.
+Do **not** paste raw unsigned hex into a wallet. Empty scriptSig is valid unsigned Bitcoin format, but ElectrumSV and others treat plain hex as already signed — that is a wallet limitation, not a bug in the transaction bytes.
+
+Alternatively: scripts/sign-tx.ts with the hex and satoshis from the bundle, or optional ElectrumSV JSON if you filled in xpub/derivation in the UTXO form.
 
 ---
 
@@ -301,17 +302,16 @@ export function renderGuide(): string {
         <p class="sz-guide-note">A failed broadcast is always safe to retry. The editor never builds the anchor until all chunk hashes are confirmed.</p>
       `)}
 
-      ${section('§5 — Signing transactions: ElectrumSV path', `
-        <p>After the editor builds an unsigned transaction, you must sign it in your wallet. Here is the ElectrumSV workflow.</p>
+      ${section('§5 — Signing transactions (sign bundle + sign.html)', `
+        <p>The editor exports a <strong>sign bundle</strong> — JSON with <code>"unsigned": true</code> plus the hex and input metadata. This is wallet-agnostic. Raw unsigned hex alone is not: wallets like ElectrumSV treat empty scriptSig as already signed.</p>
         <div class="sz-guide-steps">
-          ${step(1, 'Copy the <strong>JSON</strong> transaction from the editor (EXPORT CHUNKS step). Click COPY. Do <em>not</em> paste raw hex — ElectrumSV treats plain hex with empty signatures as already signed.')}
-          ${step(2, 'In ElectrumSV: go to <strong>Tools → Load Transaction</strong>. Paste the JSON. Status should show <strong>Unsigned</strong>. Verify inputs and outputs.')}
-          ${step(3, 'Click <strong>Sign</strong>. If Sign is disabled, add your account xpub and derivation path in the UTXO form before building (optional fields). Alternatively use the CLI signer (<code>scripts/sign-tx.ts</code>).')}
-          ${step(4, 'Click <strong>Broadcast</strong> (or go to Tools → Broadcast Transaction, paste the signed hex). ElectrumSV broadcasts to the BSV network and returns the txid.')}
-          ${step(5, 'Copy the txid. Return to the editor and paste it into the txid input field. Continue to the next step.')}
+          ${step(1, 'Copy the <strong>sign bundle</strong> from the EXPORT step (COPY BUNDLE), or click OPEN SIGNER.')}
+          ${step(2, 'In <strong>sign.html</strong>, paste the bundle and your WIF private key. Click Sign. Your key never leaves the page.')}
+          ${step(3, 'Copy the signed hex. Broadcast via any BSV wallet, explorer, or node.')}
+          ${step(4, 'Paste the returned txid back into the editor and continue.')}
         </div>
         <div class="sz-notice sz-mt-sm">
-          Repeat this for each chunk transaction in order, then once more for the anchor transaction. <strong>Do not broadcast the anchor before all chunk txids are collected and verified.</strong>
+          Optional: if you entered ElectrumSV xpub/derivation in the UTXO form, an Electrum-specific JSON export appears under a collapsible section. Otherwise use sign.html or <code>scripts/sign-tx.ts</code>.
         </div>
       `)}
 

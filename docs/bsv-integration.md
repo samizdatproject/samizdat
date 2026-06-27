@@ -1,6 +1,6 @@
 # BSV Integration — Research Findings
 
-Verified before implementing the transaction constructor. See KICKOFF.md §"Must verify".
+Verified before implementing the transaction constructor. See the protocol spec and BSV genesis limits.
 
 ## SDK Selection
 

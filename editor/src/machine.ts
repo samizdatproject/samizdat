@@ -30,7 +30,8 @@ export interface FileEntry {
 export interface ChunkBundle {
   index: number;
   hexTx: string;
-  electrumJsonTx: string;
+  signBundleJson: string;
+  electrumJsonTx: string | null;
   feeEstimateSats: bigint;
 }
 
@@ -43,7 +44,8 @@ export interface EditorState {
   rawChunks: Uint8Array[];
   chunkBundles: ChunkBundle[];
   anchorHexTx: string;
-  anchorElectrumJsonTx: string;
+  anchorSignBundleJson: string;
+  anchorElectrumJsonTx: string | null;
   anchorFee: bigint;
   chunkTxids: string[];
   anchorTxid: string;
@@ -66,7 +68,8 @@ export function initialState(): EditorState {
     rawChunks: [],
     chunkBundles: [],
     anchorHexTx: '',
-    anchorElectrumJsonTx: '',
+    anchorSignBundleJson: '',
+    anchorElectrumJsonTx: null,
     anchorFee: 0n,
     chunkTxids: [],
     anchorTxid: '',

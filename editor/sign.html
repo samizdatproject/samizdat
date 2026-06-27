@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
+  <title>SAMIZDAT — Sign Transaction</title>
+</head>
+<body>
+  <header class="sz-header">
+    <span class="sz-header-name">SAMIZDAT Signer</span>
+    <span class="sz-header-version">offline</span>
+  </header>
+
+  <main class="sz-main" style="max-width:52rem;margin:0 auto;padding:1.5rem">
+    <div class="sz-section">
+      <div class="sz-section-head">Sign unsigned transaction</div>
+      <div class="sz-section-body">
+        <div class="sz-warn-block sz-mb">
+          <div class="sz-warn"><span class="sz-warn-label">Local only</span>: your WIF never leaves this page. For maximum isolation, save this HTML file and open it via <code>file://</code> instead of the network.</div>
+          <div class="sz-warn"><span class="sz-warn-label">Why not raw hex?</span> Standard unsigned Bitcoin hex has empty signatures — many wallets wrongly treat that as already signed. Use the SAMIZDAT sign bundle from the editor export step.</div>
+        </div>
+
+        <div class="sz-form-row">
+          <label>Sign bundle JSON</label>
+          <textarea id="bundle-input" class="is-data" rows="8" placeholder='paste {"protocol":"samizdat-sign-bundle",...}'></textarea>
+        </div>
+
+        <div class="sz-form-row">
+          <label>WIF private key</label>
+          <input type="password" id="wif-input" class="is-data" autocomplete="off" spellcheck="false" placeholder="starts with K, L, or 5">
+        </div>
+
+        <div class="sz-btn-row">
+          <button class="sz-btn sz-btn-primary" id="sign-btn">Sign transaction</button>
+        </div>
+
+        <div id="error-box" class="sz-unverified sz-mb" style="display:none;margin-top:1rem"></div>
+
+        <div id="result-box" style="display:none;margin-top:1.5rem">
+          <span class="sz-data-label">Signed transaction hex (broadcast this)</span>
+          <div class="sz-copy-wrap">
+            <div class="sz-hex-block" id="signed-hex"></div>
+            <button class="sz-btn sz-btn-secondary" id="copy-btn">COPY</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="/src/sign-page.ts"></script>
+</body>
+</html>

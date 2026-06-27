@@ -1,9 +1,6 @@
 /**
  * SAMIZDAT Editor — Playwright E2E tests.
  *
- * Covers the automatable portions of the Tor Browser test checklist
- * (docs/tor-browser-test.md Sections B and C1–C4):
- *
  *   B1  Markdown mode: editor textarea + live preview
  *   B2  File upload mode: file list, metadata-stripped warning
  *   B4  MIME detection: magic bytes over filename extension
@@ -12,12 +9,11 @@
  *   C3  REVIEW → CONFIRM: irreversibility warning + disabled button
  *   C4  CONFIRM → EXPORT_CHUNKS: checkbox enables button; chunk tx hex produced
  *
- * Privacy invariants tested automatically (Section A4 equivalent):
+ * Privacy invariants tested automatically:
  *   - No external network requests during any step (request interception)
  *   - CSP header present and correct in served HTML
  *
- * Steps C5–C10 require a real BSV wallet and are covered by the manual
- * checklist in docs/tor-browser-test.md.
+ * Steps C5–C10 require a real BSV wallet and are not covered here.
  *
  * Selector convention: all HTML classes use the sz-* prefix (e.g. .sz-section-head,
  * .sz-warn-block). IDs are used without prefix (e.g. #prepare-btn, #md-input).
@@ -272,7 +268,6 @@ const TEST_UTXO = {
 };
 
 async function fillUtxoForm(page: Page, prefix: string, utxo = TEST_UTXO): Promise<void> {
-  // Open the <details> if it exists and is not already open.
   const details = page.locator(`#${prefix}-details`);
   if (await details.count() > 0 && !(await details.evaluate((el) => (el as HTMLDetailsElement).open))) {
     await details.locator('summary').click();
@@ -298,7 +293,8 @@ async function reachExportChunks(page: Page, content: string): Promise<string> {
   await page.check('#confirm-check');
   await page.click('#build-chunks-btn');
   await expect(page.locator('.sz-section-head')).toContainText('chunk transactions');
-  const hex = await page.locator('#chunk-hex-0').textContent();
+  const hex = await page.locator('#chunk-bundle-0').textContent();
+  expect(hex).toContain('"unsigned":true');
   return hex ?? '';
 }
 

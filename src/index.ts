@@ -12,4 +12,5 @@ export * from './tx/fees';
 export * from './tx/builder';
 export * from './tx/parse';
 export * from './tx/electrum';
+export * from './tx/sign-bundle';
 export * from './tx/receipt';
