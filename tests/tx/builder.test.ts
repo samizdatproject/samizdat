@@ -35,6 +35,8 @@ describe('buildChunkTxs', () => {
     expect(bundles).toHaveLength(1);
     expect(typeof bundles[0]!.hexTx).toBe('string');
     expect(bundles[0]!.hexTx.length).toBeGreaterThan(0);
+    expect(typeof bundles[0]!.electrumJsonTx).toBe('string');
+    expect(JSON.parse(bundles[0]!.electrumJsonTx).complete).toBe(false);
     expect(bundles[0]!.signerInputs).toHaveLength(1);
     expect(bundles[0]!.feeEstimateSats).toBeGreaterThan(0n);
   });
@@ -73,6 +75,7 @@ describe('buildAnchorTx', () => {
 
     expect(typeof bundle.hexTx).toBe('string');
     expect(bundle.hexTx.length).toBeGreaterThan(0);
+    expect(JSON.parse(bundle.electrumJsonTx).complete).toBe(false);
     expect(bundle.signerInputs).toHaveLength(1);
     expect(bundle.feeEstimateSats).toBeGreaterThan(0n);
   });

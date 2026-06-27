@@ -10,4 +10,6 @@ export * from './tx/rawtx';
 export * from './tx/encoding';
 export * from './tx/fees';
 export * from './tx/builder';
+export * from './tx/parse';
+export * from './tx/electrum';
 export * from './tx/receipt';

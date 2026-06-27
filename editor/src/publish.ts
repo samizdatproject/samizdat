@@ -24,6 +24,7 @@ export interface BuildTxsResult {
 
 export interface BuildAnchorResult {
   anchorHexTx: string;
+  anchorElectrumJsonTx: string;
   anchorFee: bigint;
 }
 
@@ -108,6 +109,7 @@ export async function buildChunkTransactions(
   const chunkBundles: ChunkBundle[] = bundles.map((b, i) => ({
     index: i,
     hexTx: b.hexTx,
+    electrumJsonTx: b.electrumJsonTx,
     feeEstimateSats: b.feeEstimateSats,
   }));
   return { chunkBundles };
@@ -119,7 +121,11 @@ export async function buildAnchorTransaction(
   utxo: Utxo,
 ): Promise<BuildAnchorResult> {
   const bundle = await buildAnchorTx(manifest, chunkTxids, utxo);
-  return { anchorHexTx: bundle.hexTx, anchorFee: bundle.feeEstimateSats };
+  return {
+    anchorHexTx: bundle.hexTx,
+    anchorElectrumJsonTx: bundle.electrumJsonTx,
+    anchorFee: bundle.feeEstimateSats,
+  };
 }
 
 // Verifies chunk data from a signed transaction hex the user pastes.

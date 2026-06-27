@@ -378,7 +378,8 @@ function renderExportChunks(): string {
       <div class="sz-section-body">
 
         <div class="sz-warn-block sz-mb">
-          <div class="sz-warn"><span class="sz-warn-label">Instructions</span>: copy each transaction below. sign it in your BSV wallet. broadcast it. paste the resulting txid in the next step.</div>
+          <div class="sz-warn"><span class="sz-warn-label">ElectrumSV</span>: copy the JSON below (not raw hex). In ElectrumSV: Tools → Load Transaction → paste. Status should show <strong>Unsigned</strong> with a Sign button.</div>
+          <div class="sz-warn"><span class="sz-warn-label">CLI</span>: use the raw hex with <code style="font-family:var(--sz-font-data);font-size:0.85em">scripts/sign-tx.ts</code> if you prefer offline WIF signing.</div>
           <div class="sz-warn"><span class="sz-warn-label">Order</span>: chunk transactions must be broadcast before the anchor transaction. do not skip steps.</div>
         </div>
 
@@ -389,7 +390,7 @@ function renderExportChunks(): string {
               &mdash; est. fee ${formatSatoshis(b.feeEstimateSats)}
             </span>
             <div class="sz-copy-wrap">
-              <div class="sz-hex-block" id="chunk-hex-${b.index}">${esc(b.hexTx)}</div>
+              <div class="sz-hex-block" id="chunk-hex-${b.index}">${esc(b.electrumJsonTx)}</div>
               <button class="sz-btn sz-btn-secondary sz-btn-copy" data-copy="${b.index}">COPY</button>
             </div>
           </div>
@@ -507,9 +508,9 @@ function renderExportAnchor(): string {
         </div>
 
         <div class="sz-mb sz-mt">
-          <span class="sz-data-label">Unsigned anchor transaction hex</span>
+          <span class="sz-data-label">ElectrumSV unsigned transaction (JSON)</span>
           <div class="sz-copy-wrap">
-            <div class="sz-hex-block" id="anchor-hex-block">${esc(state.anchorHexTx)}</div>
+            <div class="sz-hex-block" id="anchor-hex-block">${esc(state.anchorElectrumJsonTx)}</div>
             <button class="sz-btn sz-btn-secondary sz-btn-copy" data-copy="anchor">COPY</button>
           </div>
         </div>
@@ -682,11 +683,11 @@ function attachHandlers(): void {
     btn.addEventListener('click', () => {
       const id = btn.dataset['copy']!;
       let text = '';
-      if (id === 'anchor')  text = state.anchorHexTx;
+      if (id === 'anchor')  text = state.anchorElectrumJsonTx;
       else if (id === 'receipt') text = q<HTMLElement>('#receipt-json').textContent ?? '';
       else {
         const idx = parseInt(id);
-        text = state.chunkBundles[idx]?.hexTx ?? '';
+        text = state.chunkBundles[idx]?.electrumJsonTx ?? '';
       }
       navigator.clipboard.writeText(text).then(() => {
         btn.textContent = 'COPIED';
@@ -867,6 +868,7 @@ function attachHandlers(): void {
           state.anchorUtxo = utxo;
           const result = await buildAnchorTransaction(state.manifest!, state.chunkTxids, utxo);
           state.anchorHexTx  = result.anchorHexTx;
+          state.anchorElectrumJsonTx = result.anchorElectrumJsonTx;
           state.anchorFee    = result.anchorFee;
         });
       });
@@ -958,7 +960,9 @@ function readUtxoForm(prefix: string): Utxo {
   const vout   = (document.getElementById(`${prefix}-vout`)   as HTMLInputElement | null)?.value ?? '';
   const sats   = (document.getElementById(`${prefix}-sats`)   as HTMLInputElement | null)?.value ?? '';
   const script = (document.getElementById(`${prefix}-script`) as HTMLInputElement | null)?.value ?? '';
-  return parseUtxo(txid, vout, sats, script);
+  const xpub   = (document.getElementById(`${prefix}-xpub`)   as HTMLInputElement | null)?.value ?? '';
+  const deriv  = (document.getElementById(`${prefix}-deriv`)  as HTMLInputElement | null)?.value ?? '';
+  return parseUtxo(txid, vout, sats, script, xpub, deriv);
 }
 
 async function transition(
@@ -985,7 +989,27 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function parseUtxo(txid: string, voutStr: string, satsStr: string, scriptHex: string): Utxo {
+function parseDerivationPath(raw: string): number[] | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const parts = trimmed.split(/[/,\s]+/).filter(Boolean);
+  const path = parts.map(p => {
+    const n = parseInt(p, 10);
+    if (!Number.isInteger(n) || n < 0) throw new Error('Derivation path must be non-negative integers (e.g. 0/3).');
+    return n;
+  });
+  if (path.length === 0) return undefined;
+  return path;
+}
+
+function parseUtxo(
+  txid: string,
+  voutStr: string,
+  satsStr: string,
+  scriptHex: string,
+  xpub = '',
+  derivPath = '',
+): Utxo {
   const cleanTxid = txid.trim().toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(cleanTxid)) throw new Error('UTXO txid must be exactly 64 hex characters.');
 
@@ -1006,7 +1030,20 @@ function parseUtxo(txid: string, voutStr: string, satsStr: string, scriptHex: st
     throw new Error('Only standard P2PKH locking scripts are supported (76a914…88ac, 25 bytes).');
 
   const pubKeyHashHex = hex.slice(6, 46);
-  return { txid: cleanTxid, vout, satoshis, lockingScriptHex: hex, pubKeyHashHex };
+  const utxo: Utxo = { txid: cleanTxid, vout, satoshis, lockingScriptHex: hex, pubKeyHashHex };
+
+  const xpubTrimmed = xpub.trim();
+  const derivationPath = derivPath ? parseDerivationPath(derivPath) : undefined;
+  if (xpubTrimmed) {
+    if (!xpubTrimmed.startsWith('xpub')) throw new Error('ElectrumSV xpub must start with "xpub".');
+    if (!derivationPath?.length) {
+      throw new Error('Provide a derivation path when an ElectrumSV xpub is set (e.g. 0/3).');
+    }
+    utxo.electrumXpub = xpubTrimmed;
+    utxo.electrumDerivationPath = derivationPath;
+  }
+
+  return utxo;
 }
 
 function utxoForm(idPrefix: string, label: string, hint: string): string {
@@ -1040,6 +1077,16 @@ function utxoForm(idPrefix: string, label: string, hint: string): string {
           <label>Locking script hex (P2PKH)</label>
           <input type="text" id="${idPrefix}-script" class="is-data" placeholder="76a914…88ac (50 hex chars)">
           <div class="sz-field-hint">How to unlock this output — for a standard BSV address, always starts with 76a914 and ends with 88ac (50 hex chars total). In ElectrumSV: View → Coins → right-click row → Copy script pubkey.</div>
+        </div>
+        <div class="sz-form-row">
+          <label>ElectrumSV xpub <span style="color:var(--sz-faded);font-weight:normal">(optional — enables Sign)</span></label>
+          <input type="text" id="${idPrefix}-xpub" class="is-data" placeholder="xpub6…">
+          <div class="sz-field-hint">Account extended public key. In ElectrumSV: Wallet → Account → Information → Master Public Keys.</div>
+        </div>
+        <div class="sz-form-row">
+          <label>Derivation path <span style="color:var(--sz-faded);font-weight:normal">(optional)</span></label>
+          <input type="text" id="${idPrefix}-deriv" class="is-data" placeholder="0/3">
+          <div class="sz-field-hint">Path suffix for the coin you are spending (from the account xpub). In ElectrumSV: View → Coins → Derivation column, or right-click the row.</div>
         </div>
       </div>
     </details>

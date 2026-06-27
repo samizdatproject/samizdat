@@ -12,6 +12,8 @@ import { encodeChunkPayload, encodeAnchorPayload, stableStringify } from './enco
 import { estimateChunkTxBytes, estimateAnchorTxBytes, satoshisRequired } from './fees';
 import { toHex, fromHex } from '../core/hash';
 import { hashManifest } from '../core/manifest';
+import { validateRawTxHex } from './parse';
+import { buildElectrumIncompleteFromBundle } from './electrum';
 
 const DEFAULT_SAT_PER_BYTE = 1;
 // Minimum satoshis for a data-carrier output (1 sat dust per BSV convention).
@@ -19,6 +21,29 @@ const DUST_SATOSHIS = 1n;
 
 function scriptToHex(script: Uint8Array): string {
   return toHex(script);
+}
+
+function bundleFromRawTx(
+  rawTx: Uint8Array,
+  utxo: Utxo,
+  feeEstimate: bigint,
+  description: string,
+): UnsignedTxBundle {
+  const hexTx = toHex(rawTx);
+  validateRawTxHex(hexTx);
+  const signerInputs: UnsignedTxBundle['signerInputs'] = [{
+    inputIndex: 0,
+    outpoint: `${utxo.txid}:${utxo.vout}`,
+    satoshis: utxo.satoshis,
+    lockingScriptHex: utxo.lockingScriptHex,
+  }];
+  return {
+    hexTx,
+    electrumJsonTx: buildElectrumIncompleteFromBundle(hexTx, signerInputs, utxo),
+    signerInputs,
+    feeEstimateSats: feeEstimate,
+    description,
+  };
 }
 
 // Returns one unsigned tx bundle per chunk.
@@ -62,17 +87,12 @@ export async function buildChunkTxs(
       ],
     );
 
-    bundles.push({
-      hexTx: toHex(rawTx),
-      signerInputs: [{
-        inputIndex: 0,
-        outpoint: `${utxo.txid}:${utxo.vout}`,
-        satoshis: utxo.satoshis,
-        lockingScriptHex: utxo.lockingScriptHex,
-      }],
-      feeEstimateSats: feeEstimate,
-      description: `Chunk ${i} of ${chunkDataArray.length} — ${data.length} bytes, hash ${chunkRef.hash.slice(0, 16)}…`,
-    });
+    bundles.push(bundleFromRawTx(
+      rawTx,
+      utxo,
+      feeEstimate,
+      `Chunk ${i} of ${chunkDataArray.length} — ${data.length} bytes, hash ${chunkRef.hash.slice(0, 16)}…`,
+    ));
 
     // Subsequent chunks in the same flow would spend the change output.
     // This is modelled here for fee accounting; the caller wires UTXOs appropriately.
@@ -127,15 +147,10 @@ export async function buildAnchorTx(
     ],
   );
 
-  return {
-    hexTx: toHex(rawTx),
-    signerInputs: [{
-      inputIndex: 0,
-      outpoint: `${utxo.txid}:${utxo.vout}`,
-      satoshis: utxo.satoshis,
-      lockingScriptHex: utxo.lockingScriptHex,
-    }],
-    feeEstimateSats: feeEstimate,
-    description: `Anchor — manifest ${manifestHashHex.slice(0, 16)}… root ${rootHashHex.slice(0, 16)}…`,
-  };
+  return bundleFromRawTx(
+    rawTx,
+    utxo,
+    feeEstimate,
+    `Anchor — manifest ${manifestHashHex.slice(0, 16)}… root ${rootHashHex.slice(0, 16)}…`,
+  );
 }

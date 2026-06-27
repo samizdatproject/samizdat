@@ -7,6 +7,10 @@ export interface Utxo {
   satoshis: bigint;
   lockingScriptHex: string;  // hex of the P2PKH locking script (for sighash)
   pubKeyHashHex: string;     // hex of the 20-byte hash160(pubkey), for change output
+  // Optional ElectrumSV signing metadata (enables Sign in Tools → Load Transaction).
+  electrumXpub?: string;
+  electrumDerivationPath?: number[];
+  spendingPubKeyHex?: string;
 }
 
 // Per-input data the external signer needs to compute the sighash and sign.
@@ -19,7 +23,8 @@ export interface SignerInput {
 
 // An unsigned transaction plus all signing metadata for the external wallet.
 export interface UnsignedTxBundle {
-  hexTx: string;                  // hex of the serialised unsigned transaction
+  hexTx: string;                  // hex of the serialised unsigned transaction (CLI / broadcast)
+  electrumJsonTx: string;           // ElectrumSV incomplete JSON (paste in Load Transaction)
   signerInputs: SignerInput[];
   feeEstimateSats: bigint;
   description: string;            // human-readable label for the UI

@@ -191,9 +191,9 @@ export function renderGuide(): string {
       ${section('§5 — Signing transactions: ElectrumSV path', `
         <p>After the editor builds an unsigned transaction, you must sign it in your wallet. Here is the ElectrumSV workflow.</p>
         <div class="sz-guide-steps">
-          ${step(1, 'Copy the unsigned transaction hex from the editor (EXPORT CHUNKS step). Click the COPY button.')}
-          ${step(2, 'In ElectrumSV: go to <strong>Tools → Load Transaction</strong>. Paste the hex. ElectrumSV shows the transaction structure — verify the inputs and outputs look correct.')}
-          ${step(3, 'Click <strong>Sign</strong>. ElectrumSV fills in the signatures for any input whose key it controls. The transaction hex is now signed.')}
+          ${step(1, 'Copy the <strong>JSON</strong> transaction from the editor (EXPORT CHUNKS step). Click COPY. Do <em>not</em> paste raw hex — ElectrumSV treats plain hex with empty signatures as already signed.')}
+          ${step(2, 'In ElectrumSV: go to <strong>Tools → Load Transaction</strong>. Paste the JSON. Status should show <strong>Unsigned</strong>. Verify inputs and outputs.')}
+          ${step(3, 'Click <strong>Sign</strong>. If Sign is disabled, add your account xpub and derivation path in the UTXO form before building (optional fields). Alternatively use the CLI signer (<code>scripts/sign-tx.ts</code>).')}
           ${step(4, 'Click <strong>Broadcast</strong> (or go to Tools → Broadcast Transaction, paste the signed hex). ElectrumSV broadcasts to the BSV network and returns the txid.')}
           ${step(5, 'Copy the txid. Return to the editor and paste it into the txid input field. Continue to the next step.')}
         </div>
