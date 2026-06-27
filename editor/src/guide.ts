@@ -33,7 +33,7 @@ The editor **never holds your keys**. The operator **never holds your funds**. T
 
 4. **Fail-safe publish order** — Chunk transactions are broadcast and **hash-verified first**. The anchor transaction is built **only after** every chunk hash is confirmed. A failed or partial publish cannot consume funds for an anchor that references missing or corrupt data.
 
-5. **Stateless verification** — A renderer accepts an **anchor txid** (`GET /tx/<txid>`), fetches on-chain data, re-hashes every chunk, checks the Merkle root, and only then serves safe HTML or downloads. If verification fails, it shows an error page. **No partial content is ever presented as verified.**
+5. **Stateless verification** — A renderer accepts an **anchor txid** (path /tx/ plus the 64-character txid), fetches on-chain data, re-hashes every chunk, checks the Merkle root, and only then serves safe HTML or downloads. If verification fails, it shows an error page. **No partial content is ever presented as verified.**
 
 6. **Metadata stripping** — JPEG/PNG EXIF and PDF /Info metadata are stripped locally before hashing. You are warned about Office documents and other formats that may still carry identifying metadata.
 
