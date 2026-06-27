@@ -1,54 +1,167 @@
 // In-editor user guide — rendered as static HTML, no network requests, CSP-compliant.
 // All content is hardcoded; no external links are clickable (connect-src 'none' enforced by CSP).
 
-export const SAMPLE_MARKDOWN = `# Hello, SAMIZDAT
+export const SAMPLE_MARKDOWN = `# SAMIZDAT — Anonymous Publishing on the Blockchain
 
-This is an anonymous publication anchored on the BSV blockchain.
+*There is no kill switch in this protocol.*
 
-## What you can write
+Every platform you have ever published on has one. Domain registrars can cancel domains. Payment processors can close accounts. CDNs can terminate contracts. Hosting companies comply with takedown orders. Even "decentralized" platforms often depend on a handful of infrastructure providers who can be pressured.
 
-Paragraphs of plain text with **bold**, *italic*, and ***bold italic*** emphasis.
+**SAMIZDAT removes the kill switch from the points that matter most.**
 
-## Lists
+---
 
-- Censorship-resistant publishing
-- No accounts, no passwords, no tracking
-- Verified by cryptographic hash, not by a server
+## What this is
 
-1. Write your content locally
-2. Build a Merkle tree over the chunks
-3. Sign and broadcast — the editor never holds keys
+**SAMIZDAT** is an open protocol and reference implementation for **anonymous, non-custodial, onion-first content publishing** anchored on the BSV blockchain.
 
-## Code
+You write your content locally. The editor running inside **Tor Browser**, on an **.onion address**, hashes your content, splits it into chunks, and builds a **Merkle tree** over those chunks. It produces **unsigned transaction hex**. You sign that hex in **your own wallet**, outside the browser. You broadcast it yourself.
 
-Inline \`code\` works. So do fenced blocks:
+The editor **never holds your keys**. The operator **never holds your funds**. The anchor is **permanent** on the blockchain. Any person running a compatible **renderer** can reconstruct and verify your document **independently**.
 
-\`\`\`
-Content is hashed before it leaves your browser.
-No plaintext crosses the network during authoring.
-\`\`\`
+> **The promise:** Anyone can publish content anonymously, pay for their own publication, anchor it on BSV, and let any community member independently render or index it — without trusting a single operator.
 
-## Images
+---
 
-Attach an image file alongside this document. Reference it by filename:
+## What it does
 
-![A descriptive caption](photo.jpg)
+1. **Local authoring** — You write Markdown, HTML, PDFs, images, or file bundles in the browser. Nothing is uploaded to a server during preparation.
 
-PNG, JPEG, GIF, and WebP are supported. The editor strips EXIF metadata
-from JPEG and PNG files automatically before hashing — no manual step needed.
+2. **Deterministic chunking** — Content is split into chunks. Each chunk is hashed with SHA-256 (domain-separated leaf hashing). A binary Merkle tree produces a **root hash** that commits to the entire document byte-for-byte.
 
-## Blockquotes
+3. **Unsigned transactions only** — The client builds chunk transaction(s) and an anchor transaction. You export them, sign in ElectrumSV or another wallet, and broadcast. No in-browser wallet. No browser extension.
 
-> "Privacy is necessary for an open society in the electronic age."
-> — A Cypherpunk's Manifesto, Eric Hughes, 1993
+4. **Fail-safe publish order** — Chunk transactions are broadcast and **hash-verified first**. The anchor transaction is built **only after** every chunk hash is confirmed. A failed or partial publish cannot consume funds for an anchor that references missing or corrupt data.
 
-## What happens when you publish
+5. **Stateless verification** — A renderer accepts a manifest hash or txid, fetches the on-chain data, re-hashes every chunk, checks the Merkle root, and only then serves safe HTML or downloads. If verification fails, it shows an error page. **No partial content is ever presented as verified.**
 
-Each file is split into chunks. A SHA-256 Merkle tree is computed over the chunk hashes.
-The root hash is anchored to a BSV transaction — on-chain, permanent, and verifiable
-by anyone with a copy of the manifest.
+6. **Metadata stripping** — JPEG/PNG EXIF and PDF /Info metadata are stripped locally before hashing. You are warned about Office documents and other formats that may still carry identifying metadata.
 
-**Publication is irreversible.** There is no delete. Verify everything before you broadcast.
+7. **Optional discovery** — Indexers and directory pages may exist. They are **never canonical**. No indexer is authoritative. Mirrors are mirrors, not source of truth.
+
+---
+
+## What it is not
+
+This is **not a platform**. There are no accounts. There is no login. No operator can de-platform you because there is no platform to be removed from.
+
+This is **not a storage service**. The protocol does not guarantee data availability — you must ensure your content is retrievable (mirrors, indexers, IPFS bridges). The **anchor is permanent**; the **data is your responsibility**.
+
+This is **not anonymous by default**. Anonymity requires Tor Browser, a fresh wallet funded without KYC linkage, and careful operational security. The protocol provides the **infrastructure**. The **opsec is yours**.
+
+This is **not irreversible in the human sense** — once broadcast, the anchor and chunk data are on-chain. **There is no delete.** Verify everything before you sign.
+
+---
+
+## The guarantee
+
+A **content-addressed Merkle root** means any correct renderer will either:
+
+- reproduce your document **exactly** (byte for byte), or
+- **refuse** to render it at all.
+
+There is no partial trust. There is no "close enough." The hash either matches or it does not.
+
+---
+
+## Core values (non-negotiable)
+
+| Principle | What it means |
+|-----------|---------------|
+| **Onion-first** | The primary path works in Tor Browser over .onion. Clearnet reveals your IP to the server operator. |
+| **No extensions** | Browser extensions are forbidden in the publish flow. They weaken anonymity and break Tor compatibility. |
+| **Non-custodial** | The operator never holds funds, never pays for your content, never signs on your behalf. |
+| **Local-first** | Hashing, chunking, manifest building, and fee estimation happen in your browser before any irreversible step. |
+| **Replaceability** | Editor, renderer, indexer, and directory are all independently replaceable. Remove one; the protocol survives. |
+| **Content-addressed truth** | The manifest hash and on-chain anchor are canonical. Everything else is implementation detail. |
+| **Minimal trust** | You do not need to trust a single operator, indexer, or storage backend. You verify the hashes yourself. |
+| **Fail-safe money** | No anchor is built until every chunk is retrieved and hash-verified. Failed publishes must not leak funds. |
+
+---
+
+## How publishing works (ten steps)
+
+Write → Prepare → Review → Confirm → Export chunks → Collect txids → Verify chunks → Export anchor → Collect anchor txid → Verify → Receipt
+
+Each step is explicit. You see the chunk count, root hash, fee estimate, and full manifest JSON before you commit. You enter your own **UTXO** (the unspent output that pays the miner fees). You sign externally. You paste back the txids. The editor verifies locally before moving forward.
+
+**Publication is irreversible.** Treat the REVIEW step as final.
+
+---
+
+## Architecture (five layers)
+
+Authoring client → Chunking engine → Your wallet signs → BSV anchor → Renderer (Indexer optional)
+
+1. **Authoring client** — static web editor; zero third-party assets; strict CSP
+2. **Chunking engine** — deterministic chunking, hashing, Merkle tree, manifest
+3. **Publication anchor** — unsigned txs exported; you sign in ElectrumSV or CLI
+4. **Renderer** — stateless; verifies all hashes; safe HTML only
+5. **Indexer** — optional; never canonical; no IP logging in the reference design
+
+---
+
+## Signing with ElectrumSV
+
+After the editor builds your transactions:
+
+1. Copy the **JSON** from the export step (not raw hex — ElectrumSV treats plain hex as already signed).
+2. **Tools → Load Transaction** → paste → status should show **Unsigned**.
+3. Click **Sign** (add your account xpub and derivation path in the UTXO form if Sign is disabled).
+4. **Broadcast** → copy the returned **txid** back into the editor.
+
+Alternatively, sign offline with scripts/sign-tx.ts and a WIF key — no network required.
+
+---
+
+## The name
+
+*Samizdat* (Russian: **самиздат**) was the practice of clandestine self-publishing under Soviet censorship — citizens typed manuscripts, carbon-copied them, and passed copies hand-to-hand to evade state control. The text survived because **no single point could kill it**.
+
+This protocol is its digital successor: content addressed by hash, anchored on a blockchain, retrievable by anyone who runs a verifier — with **no single point of failure** and **no single operator in control**.
+
+---
+
+## Threat model (honest)
+
+**SAMIZDAT mitigates:**
+
+- Network observers → Tor + onion
+- Malicious operators → content-addressed verification
+- Malicious indexers → non-canonical by design
+- Metadata leaks → local stripping + privacy warnings
+- Partial/corrupt publishes → fail-safe chunk-before-anchor ordering
+
+**SAMIZDAT does not magically fix:**
+
+- Reused wallets or addresses linking your publications
+- KYC-linked funding sources
+- Timing correlation at the network level
+- Your own metadata in the prose (names, places, writing style)
+
+Evaluate your threat model honestly. The protocol gives you tools. **You** supply the discipline.
+
+---
+
+## Get it
+
+The reference implementation is **open source**. The protocol specification is public. Any correct implementation that passes the test vectors is a compliant implementation.
+
+- Implement it freely, in any language, for any purpose.
+- Run your own editor, renderer, indexer, or mirror.
+- No permission required.
+
+---
+
+## This post
+
+This document is the **first publication** on this SAMIZDAT instance — published with SAMIZDAT itself.
+
+**Verified by hash. Censored by no one.**
+
+---
+
+*Published with SAMIZDAT. If you are reading this through a renderer, every chunk hash and the Merkle root were checked before these words reached your screen.*
 `;
 
 function esc(s: string): string {

@@ -485,8 +485,9 @@ test('Load sample button populates markdown editor with demo content', async ({ 
   await page.click('#load-sample-btn');
   // Textarea should now contain the sample document
   const value = await page.locator('#md-input').inputValue();
-  expect(value).toContain('Hello, SAMIZDAT');
-  expect(value).toContain("Cypherpunk");
+  expect(value).toContain('SAMIZDAT');
+  expect(value).toContain('kill switch');
   // Preview should update with sample content
-  await expect(page.locator('.sz-md-preview')).toContainText('Hello, SAMIZDAT');
+  await expect(page.locator('.sz-md-preview')).toContainText('SAMIZDAT');
+  await expect(page.locator('.sz-md-preview')).toContainText('kill switch');
 });
