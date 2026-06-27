@@ -1,9 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { buildSignBundle, parseSignBundle, SIGN_BUNDLE_PROTOCOL } from '../../src/tx/sign-bundle';
+import { buildUnsignedTx } from '../../src/tx/rawtx';
+import { toHex } from '../../src/core/hash';
+import { DUMMY_OUTPUT_SCRIPT_HEX } from './test-utxo';
 
 describe('sign bundle', () => {
+  const hexTx = toHex(buildUnsignedTx(
+    [{ txidHex: '0'.repeat(63) + '1', vout: 0 }],
+    [{ satoshis: 0n, scriptHex: DUMMY_OUTPUT_SCRIPT_HEX }],
+  ));
   const bundle = {
-    hexTx: '01000000010000000000000000000000000000000000000000000000000000000000000100000000000000000ffffffff010000000000000000006a000000000000000000000000',
+    hexTx,
     signerInputs: [{
       inputIndex: 0,
       outpoint: 'a'.repeat(64) + ':0',

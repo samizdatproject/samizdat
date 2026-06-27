@@ -54,7 +54,7 @@ function bundleFromRawTx(
 }
 
 // Returns one unsigned tx bundle per chunk.
-// Each tx spends `utxo`, writes the chunk payload to OP_FALSE OP_RETURN, and sends change back.
+// Each tx spends `utxo`, writes the chunk payload to a data-carrier P2PKH output, and sends change back.
 export async function buildChunkTxs(
   manifest: Manifest,
   chunkDataArray: Uint8Array[],

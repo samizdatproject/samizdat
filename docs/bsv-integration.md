@@ -15,19 +15,19 @@ encoding instead:
 - The encoding is fully specified here and can be re-implemented in any language
 - Integrators who want `@bsv/sdk` can wrap `BsvTxBackend` themselves
 
-## OP_FALSE OP_RETURN Convention (BSV Post-Genesis)
+## Data-Carrier P2PKH Convention (BSV Post-Genesis)
 
-On BSV post-Genesis (block 620538, Feb 2020), data storage outputs use:
+On BSV post-Genesis (block 620538, Feb 2020), SAMIZDAT embeds payloads in a
+**data-carrier P2PKH locking script**:
 
 ```
-OP_FALSE OP_RETURN [pushdata elements...]
+<PUSHDATA(blob)> OP_DROP OP_DUP OP_HASH160 <20-byte-hash> OP_EQUALVERIFY OP_CHECKSIG
 ```
 
-- `OP_FALSE` = `0x00` — makes the output provably unspendable
-- `OP_RETURN` = `0x6a` — marks end of meaningful script
-- Each data element is pushed using minimally-encoded PUSHDATA opcodes
-- Each FALSE RETURN output can hold up to **100KB** of data
-- Multiple FALSE RETURN outputs are allowed per transaction
+- The blob is pushed and immediately dropped (`OP_DROP` = `0x75`)
+- The remaining P2PKH suffix is spendable by the author's key
+- Each data-carrier output carries 1 satoshi (dust convention)
+- Block explorers such as WhatsOnChain and Bitails index this pattern
 
 References: genesis-spec.md, BSV Skills Center.
 
@@ -108,33 +108,36 @@ For fee computation, each P2PKH input contributes ~148 bytes when signed:
 
 ## SAMIZDAT Protocol Marker
 
-SAMIZDAT anchor transactions are identified by the 4-byte ASCII marker `SAMIZDAT`
-(`0x42 0x41 0x50 0x50`) as the first push element after `OP_FALSE OP_RETURN`.
-The second element identifies the payload type: `CHUNK` or `ANCHOR`.
+SAMIZDAT transactions are identified by the 4-byte ASCII marker `SMZD`
+(`0x53 0x4d 0x5a 0x44`) at the start of the embedded blob.
+The next byte identifies the record type: `0x01` = chunk, `0x02` = anchor.
 
 ## Chunk Transaction Payload Structure
 
+Blob embedded in the data-carrier output:
+
 ```
-OP_FALSE OP_RETURN
-  [0] "SAMIZDAT"         4 bytes  — protocol marker
-  [1] "CHUNK"        5 bytes  — type
-  [2] 0x01           1 byte   — version
-  [3] chunk_index    4 bytes LE uint32
-  [4] chunk_data     variable (≤ 100 KB default)
+[4]     "SMZD"           protocol marker
+[1]     0x01             TYPE_CHUNK
+[1]     0x01             version
+[4 LE]  chunk_index
+[4 LE]  data_length
+[n]     chunk_data       (≤ 100 KB default target)
 ```
 
 ## Anchor Transaction Payload Structure
 
 ```
-OP_FALSE OP_RETURN
-  [0] "SAMIZDAT"          4 bytes  — protocol marker
-  [1] "ANCHOR"        6 bytes  — type
-  [2] 0x01            1 byte   — version
-  [3] manifest_hash   32 bytes — SHA-256(stableJSON(manifest))
-  [4] root_hash       32 bytes — Merkle root
-  [5] chunk_txids     JSON UTF-8 — array of hex txid strings, in chunk order
-  [6] manifest_json   JSON UTF-8 — full manifest object (stable key order)
+[4]     "SMZD"           protocol marker
+[1]     0x02             TYPE_ANCHOR
+[1]     0x01             version
+[32]    manifest_hash    SHA-256(stableJSON(manifest))
+[32]    root_hash        Merkle root
+[4 LE]  chunk_txids_len
+[n]     chunk_txids      JSON UTF-8 array of hex txid strings, in chunk order
+[4 LE]  manifest_len
+[m]     manifest_json    full manifest object (stable key order)
 ```
 
-Both [5] and [6] use stable JSON (alphabetically sorted keys) for deterministic
+Both chunk_txids and manifest_json use stable JSON (alphabetically sorted keys) for deterministic
 serialisation and hash verification.

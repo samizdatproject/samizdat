@@ -152,7 +152,7 @@ export async function verifyChunkFromHex(
   manifest: Manifest,
 ): Promise<boolean> {
   const txBytes = hexToBytes(signedTxHex);
-  // Parse outputs to find the OP_FALSE OP_RETURN SAMIZDAT output
+  // Parse outputs to find the SAMIZDAT data-carrier blob
   // For now: look for the chunk payload by scanning for SAMIZDAT marker in outputs
   const chunkPayload = extractChunkPayload(txBytes, chunkIndex);
   if (!chunkPayload) return false;

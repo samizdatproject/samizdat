@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { writePushData, buildDataScript, buildP2PKHScript, parsePushDataElements } from '../../src/tx/script';
+import {
+  writePushData,
+  buildDataCarrierScript,
+  buildP2PKHScript,
+  extractDataCarrierPayload,
+} from '../../src/tx/script';
 
 describe('writePushData', () => {
   it('encodes empty data as OP_0', () => {
@@ -35,24 +40,23 @@ describe('writePushData', () => {
   });
 });
 
-describe('buildDataScript', () => {
-  it('starts with OP_FALSE OP_RETURN', () => {
-    const script = buildDataScript(new Uint8Array([0x01, 0x02]));
-    expect(script[0]).toBe(0x00);
-    expect(script[1]).toBe(0x6a);
+describe('buildDataCarrierScript', () => {
+  const hash = new Uint8Array(20).fill(0xab);
+
+  it('embeds blob before OP_DROP and P2PKH suffix', () => {
+    const blob = new Uint8Array([0x53, 0x4d, 0x5a, 0x44, 0x01]);
+    const script = buildDataCarrierScript(blob, hash);
+    expect(script[0]).toBe(0x05); // push 5 bytes
+    expect(script.slice(1, 6)).toEqual(blob);
+    expect(script[6]).toBe(0x75); // OP_DROP
+    expect(script[7]).toBe(0x76); // OP_DUP — start of P2PKH
+    expect(script.length).toBe(7 + 25);
   });
 
-  it('builds script with multiple elements', () => {
-    const el1 = new Uint8Array([0x01]);
-    const el2 = new Uint8Array([0x02, 0x03]);
-    const script = buildDataScript(el1, el2);
-    expect(script[0]).toBe(0x00);
-    expect(script[1]).toBe(0x6a);
-    // el1: [0x01, 0x01]
-    expect(script[2]).toBe(0x01);
-    expect(script[3]).toBe(0x01);
-    // el2: [0x02, 0x02, 0x03]
-    expect(script[4]).toBe(0x02);
+  it('round-trips blob through extractDataCarrierPayload', () => {
+    const blob = new Uint8Array(100).fill(0xbb);
+    const script = buildDataCarrierScript(blob, hash);
+    expect(extractDataCarrierPayload(script)).toEqual(blob);
   });
 });
 
@@ -74,29 +78,11 @@ describe('buildP2PKHScript', () => {
   });
 });
 
-describe('parsePushDataElements round-trip', () => {
-  it('round-trips elements through buildDataScript', () => {
-    const elements = [
-      new Uint8Array([0x41, 0x42, 0x43, 0x44]),  // "ABCD" — 4 bytes
-      new Uint8Array([0x01, 0x02, 0x03]),          // 3 bytes
-      new Uint8Array(100).fill(0xbb),              // 100 bytes (needs OP_PUSHDATA1)
-    ];
-    const script = buildDataScript(...elements);
-    const recovered = parsePushDataElements(script);
-    expect(recovered).toHaveLength(3);
-    expect(recovered[0]).toEqual(elements[0]);
-    expect(recovered[1]).toEqual(elements[1]);
-    expect(recovered[2]).toEqual(elements[2]);
-  });
+describe('extractDataCarrierPayload', () => {
+  const hash = new Uint8Array(20).fill(0xcd);
 
-  it('throws on non-OP_FALSE OP_RETURN script', () => {
-    expect(() => parsePushDataElements(new Uint8Array([0x76, 0xa9]))).toThrow(/OP_FALSE OP_RETURN/);
-  });
-
-  it('handles empty elements correctly', () => {
-    const script = buildDataScript(new Uint8Array([]));
-    const els = parsePushDataElements(script);
-    expect(els).toHaveLength(1);
-    expect(els[0]).toEqual(new Uint8Array(0));
+  it('throws on non-data-carrier script', () => {
+    const p2pkh = buildP2PKHScript(hash);
+    expect(() => extractDataCarrierPayload(p2pkh)).toThrow(/data push/);
   });
 });

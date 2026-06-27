@@ -8,7 +8,7 @@ import {
 } from '../../src/tx/electrum';
 import { buildUnsignedTx } from '../../src/tx/rawtx';
 import { toHex } from '../../src/core/hash';
-import { makeTestUtxo } from './test-utxo';
+import { makeTestUtxo, DUMMY_OUTPUT_SCRIPT_HEX } from './test-utxo';
 import type { Utxo } from '../../src/tx/types';
 
 const DUMMY_TXID = '0000000000000000000000000000000000000000000000000000000000000001';
@@ -20,7 +20,7 @@ function makeUtxo(overrides: Partial<Utxo> = {}): Utxo {
 describe('buildElectrumIncompleteJson', () => {
   const hexTx = toHex(buildUnsignedTx(
     [{ txidHex: DUMMY_TXID, vout: 0 }],
-    [{ satoshis: 1n, scriptHex: '006a' }],
+    [{ satoshis: 1n, scriptHex: DUMMY_OUTPUT_SCRIPT_HEX }],
   ));
 
   it('marks the transaction incomplete with placeholder signatures and x_pubkeys', () => {

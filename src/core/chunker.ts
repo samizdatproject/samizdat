@@ -3,7 +3,7 @@ import { hashLeaf, sha256Raw, toHex } from './hash';
 // BSV Post-Genesis limits (verified against genesis-spec.md, block 620538, Feb 2020).
 // Consensus max tx: 1GB. Default miner script policy: 500KB.
 // Target 100KB matches the BCAT protocol convention, well within default policy.
-// Do NOT use BTC values (520-byte push, 80-byte OP_RETURN) — those are wrong for BSV.
+// Do NOT use legacy Bitcoin push caps (520-byte push, 80-byte carrier) — those are wrong for BSV.
 export const CHUNK_SIZE_MIN    =          1_024; //   1 KB — floor for validation
 export const CHUNK_SIZE_TARGET =    100 * 1_024; // 100 KB — default
 export const CHUNK_SIZE_MAX    =    500 * 1_024; // 500 KB — default miner script policy

@@ -26,7 +26,7 @@ describe('TxChunkSource', () => {
   });
 
   it('throws CHUNK_MISSING when the tx blob is not a valid chunk payload', async () => {
-    const badBlob = new Uint8Array([0x00, 0x6a, 0x04, 0x42, 0x41, 0x44, 0x21]); // not SAMIZDAT
+    const badBlob = new Uint8Array([0x01, 0x42, 0x41, 0x44]); // not a SAMIZDAT blob
     const chain = new MockChainReader().add('bad-tx', badBlob);
     const source = new TxChunkSource(chain);
     await expect(source.fetchChunk('anyhash', 'bad-tx')).rejects.toMatchObject({

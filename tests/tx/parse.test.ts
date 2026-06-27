@@ -4,7 +4,7 @@ import { toHex } from '../../src/core/hash';
 import { parseRawTx, validateRawTxHex } from '../../src/tx/parse';
 import { buildManifest } from '../../src/core/manifest';
 import { buildChunkTxs } from '../../src/tx/builder';
-import { makeTestUtxo } from './test-utxo';
+import { makeTestUtxo, DUMMY_OUTPUT_SCRIPT_HEX } from './test-utxo';
 
 const DUMMY_TXID = '0000000000000000000000000000000000000000000000000000000000000001';
 
@@ -12,7 +12,7 @@ describe('parseRawTx', () => {
   it('consumes the full buffer for a minimal unsigned tx', () => {
     const raw = buildUnsignedTx(
       [{ txidHex: DUMMY_TXID, vout: 0 }],
-      [{ satoshis: 1n, scriptHex: '006a' }],
+      [{ satoshis: 1n, scriptHex: DUMMY_OUTPUT_SCRIPT_HEX }],
     );
     const parsed = parseRawTx(raw);
     expect(parsed.version).toBe(1);
@@ -24,7 +24,7 @@ describe('parseRawTx', () => {
   it('throws when the buffer has trailing bytes', () => {
     const raw = buildUnsignedTx(
       [{ txidHex: DUMMY_TXID, vout: 0 }],
-      [{ satoshis: 1n, scriptHex: '006a' }],
+      [{ satoshis: 1n, scriptHex: DUMMY_OUTPUT_SCRIPT_HEX }],
     );
     const padded = new Uint8Array(raw.length + 4);
     padded.set(raw);
@@ -34,7 +34,7 @@ describe('parseRawTx', () => {
   it('validateRawTxHex round-trips from hex string', () => {
     const hex = toHex(buildUnsignedTx(
       [{ txidHex: DUMMY_TXID, vout: 0 }],
-      [{ satoshis: 1n, scriptHex: '006a' }],
+      [{ satoshis: 1n, scriptHex: DUMMY_OUTPUT_SCRIPT_HEX }],
     ));
     expect(validateRawTxHex(hex).inputCount).toBe(1);
   });
