@@ -678,6 +678,8 @@ The protocol spec (`SPEC.md`) documents what is mandatory versus optional. Any i
 
 SAMIZDAT is free, open-source software. No tracking, no telemetry, no ads.
 
+**Contact:** [samizdatproject@proton.me](mailto:samizdatproject@proton.me)
+
 **Monero (XMR)** — recommended for privacy:
 ```
 4Av1J2bZdvkes5j9ZFLZhuRoKHwK4HmyrdHywAKoVSZzEW6RQ3mq7JpWExNiBMxYSRFTvv2ygWNCaTASZbnpUJAo8Fs6BGQ

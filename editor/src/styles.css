@@ -552,11 +552,12 @@ textarea.sz-editor-textarea:focus {
   border-color: var(--sz-red);
 }
 
-.sz-btn-copy {
+.sz-btn-copy,
+.sz-btn-sign {
   font-size: 0.72rem;
   padding: 0.35rem 0.75rem;
   flex-shrink: 0;
-  align-self: flex-start;
+  white-space: nowrap;
 }
 
 .sz-btn-row {
@@ -649,9 +650,21 @@ textarea.sz-editor-textarea:focus {
 
 .sz-copy-wrap {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
+}
+
+.sz-copy-wrap .sz-hex-block {
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.sz-copy-wrap .sz-btn {
+  font-size: 0.72rem;
+  padding: 0.35rem 0.75rem;
+  white-space: nowrap;
 }
 
 /* ───────────────────────────────────────────── TABLE ── */
