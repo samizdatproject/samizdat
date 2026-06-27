@@ -1,0 +1,36 @@
+{
+  "name": "samizdat-core",
+  "version": "0.1.0",
+  "description": "SAMIZDAT core library — hashing, Merkle tree, chunking, manifest builder and validator",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "generate-vectors": "tsx scripts/generate-vectors.ts",
+    "editor:dev": "vite editor --config editor/vite.config.ts",
+    "editor:build": "vite build editor --config editor/vite.config.ts",
+    "editor:typecheck": "tsc --noEmit --project editor/tsconfig.json",
+    "renderer:dev": "tsx src/server.ts",
+    "indexer:dev": "tsx src/indexer/server.ts",
+    "e2e": "playwright test --config playwright.config.ts",
+    "audit:bundle": "tsx scripts/audit-bundle.ts"
+  },
+  "devDependencies": {
+    "@noble/curves": "^2.2.0",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.6.1",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}

@@ -1,0 +1,667 @@
+# SAMIZDAT
+
+**BSV Anonymous Publishing Protocol — Reference Implementation**
+
+SAMIZDAT is an open protocol and reference implementation for anonymous, non-custodial, onion-first content publishing anchored on the BSV blockchain. Anyone can publish an article, PDF, image bundle, or static site — paying their own fees, signing with their own wallet, through Tor Browser — with no account, no login, and no operator able to censor, de-platform, or charge a toll on their behalf.
+
+The word *samizdat* (Russian: самиздат) described the practice of clandestine self-publishing under Soviet censorship — passing carbon copies hand-to-hand to evade state control. This protocol is its digital successor.
+
+---
+
+## The Promise
+
+> Anyone can publish content anonymously, pay for their own publication, anchor it on BSV, and let any community member independently render or index it — without trusting a single operator.
+
+---
+
+## Table of Contents
+
+- [Why This Exists](#why-this-exists)
+- [Architecture](#architecture)
+- [How Publishing Works](#how-publishing-works)
+- [Security Model](#security-model)
+- [Repository Layout](#repository-layout)
+- [Getting Started](#getting-started)
+- [Running the Editor](#running-the-editor)
+- [Running the Renderer](#running-the-renderer)
+- [Deploying an Onion Site](#deploying-an-onion-site)
+- [CLI Transaction Signing](#cli-transaction-signing)
+- [Testing](#testing)
+- [Protocol Specification](#protocol-specification)
+- [Hard Rules](#hard-rules)
+- [Threat Model](#threat-model)
+- [Manifest Format](#manifest-format)
+- [Transaction Encoding](#transaction-encoding)
+- [Verification Flow](#verification-flow)
+- [Contributing](#contributing)
+- [Support](#support)
+
+---
+
+## Why This Exists
+
+Every publishing platform today has a kill switch. Domain registrars cancel domains. App stores remove apps. Payment processors cut accounts. CDNs terminate contracts. Hosting companies comply with takedown orders. Even decentralized platforms often depend on a small set of infrastructure providers that can be pressured.
+
+SAMIZDAT removes the kill switch from three critical points:
+
+1. **Publication** — the author pays directly, via their own wallet, from their own funds. No operator can block a publication by refusing to process payment.
+2. **Anchoring** — the content hash is written into the BSV blockchain as an immutable, timestamped record. No operator can retroactively deny that a publication occurred.
+3. **Retrieval** — any person running a compatible renderer can reconstruct and verify the content. No single renderer is canonical; if one is shut down, others remain.
+
+The protocol is designed so that the authoring tool, renderer, indexer, and directory are all independently replaceable. Removing any one of them does not break the protocol.
+
+---
+
+## Architecture
+
+SAMIZDAT has five independent, replaceable layers:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Authoring Client  (editor/)                            │
+│  Static web app · Tor Browser · zero third-party assets │
+└───────────────────────┬─────────────────────────────────┘
+                        │ unsigned tx hex (exported)
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│  Author's Own Wallet  (external)                        │
+│  Signs and broadcasts · never inside the browser        │
+└───────────────────────┬─────────────────────────────────┘
+                        │ txid(s)
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│  BSV Blockchain  (canonical anchor)                     │
+│  P2PKH data-carrier outputs · content-addressed · final │
+└───────────────────────┬─────────────────────────────────┘
+                        │ txid or manifest hash
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│  Renderer  (src/renderer/ + src/server.ts)              │
+│  Stateless · verifies every hash · safe HTML output     │
+└─────────────────────────────────────────────────────────┘
+                        │ (optional)
+                        ▼
+┌─────────────────────────────────────────────────────────┐
+│  Indexer  (src/indexer/)                                │
+│  Never canonical · no user accounts · no IP logging     │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Layer** | **Delivered as** | **Replaceable by**
+--- | --- | ---
+Core library | TypeScript (`src/core/`) | Any implementation passing the test vectors
+Transaction constructor | TypeScript (`src/tx/`) | Any unsigned-tx builder using the same encoding
+Stateless renderer | Node HTTP service (`src/renderer/`, `src/server.ts`) | Any verifying renderer
+Tor-safe web editor | Static Vite bundle (`editor/`) | Any editor producing valid manifests
+Indexer / directory | Optional services (`src/indexer/`, `directory/`) | Any community-run equivalent
+
+---
+
+## How Publishing Works
+
+Publishing is a 10-step state machine. Each step is explicit, reviewable, and gated — no step can be skipped, and no irreversible action occurs until the author confirms.
+
+```
+IDLE
+  │  author writes content (Markdown / HTML / PDF / image / archive)
+  ▼
+PREPARE
+  │  client hashes content locally, builds manifest, estimates fees
+  ▼
+REVIEW
+  │  author sees: chunk count, root hash, privacy warnings, manifest JSON
+  ▼
+CONFIRM
+  │  author enters their UTXO details; checks the irreversibility checkbox
+  ▼
+EXPORT_CHUNKS
+  │  client builds unsigned chunk transaction(s); author copies hex
+  ▼
+COLLECT_CHUNK_TXIDS
+  │  author signs + broadcasts in their wallet; pastes txid(s) back
+  ▼
+VERIFY_CHUNKS
+  │  client fetches signed tx, re-hashes every chunk payload, compares
+  │  to declared chunk hashes — BLOCKED until all match
+  ▼
+EXPORT_ANCHOR
+  │  only now: client builds unsigned anchor tx referencing verified txids
+  ▼
+COLLECT_ANCHOR_TXID
+  │  author signs + broadcasts anchor; pastes anchor txid back
+  ▼
+VERIFY_ANCHOR
+  │  client fetches anchor tx, verifies manifest hash and Merkle root
+  ▼
+RECEIPT
+     manifest hash, txid(s), root hash, retrieval endpoints
+```
+
+**Why this order matters:** the anchor transaction is never built until every chunk has been retrieved and its hash independently verified. If any chunk fails, the anchor is never created. This means a failed or partial publish cannot consume funds for an anchor that references missing or corrupt data.
+
+The client never touches private keys. It exports a raw unsigned transaction hex that the author signs in their own wallet — ElectrumSV, command-line tools, or any compatible BSV signer.
+
+---
+
+## Security Model
+
+### What the client never does
+
+- Never holds, imports, or requests private keys
+- Never makes external network requests (enforced by CSP: `connect-src 'none'`)
+- Never loads third-party fonts, scripts, or analytics
+- Never stores content, manifests, or keys server-side
+- Never builds the anchor transaction before chunk hashes are verified
+
+### What the renderer always does
+
+- Verifies every chunk hash with `verifyChunkData` before presenting content
+- Verifies the Merkle root with `verifyMerkleRoot` before rendering
+- Returns a 422 with a clean error page if any verification fails
+- Sanitizes HTML (removes scripts, event handlers, external fetches)
+- Strips EXIF metadata from images
+- Serves PDFs as `Content-Disposition: attachment` only — no inline execution
+- Enforces strict CSP on rendered output
+
+### Secure context requirement
+
+The Web Crypto API (`crypto.subtle`) is only available in secure contexts. The editor requires one of:
+
+- An **`.onion` address** in Tor Browser — recommended for anonymity
+- An **`https://`** origin with a valid certificate
+- **`http://localhost`** for local development only
+
+Accessing via plain `http://` over a public IP exposes your IP to the server and disables the Web Crypto API. The editor will show an explicit error if this is detected.
+
+---
+
+## Repository Layout
+
+```
+samizdat/
+├── src/
+│   ├── core/               # Pure functions — no network, no UI
+│   │   ├── hash.ts         # SHA-256 with SAMIZDAT_LEAF_1 / SAMIZDAT_NODE_1 prefixes
+│   │   ├── merkle.ts       # Binary Merkle tree, odd-level duplicate rule
+│   │   ├── chunker.ts      # Fixed-size deterministic chunker
+│   │   ├── manifest.ts     # Manifest builder + strict validator
+│   │   └── types.ts        # Protocol types
+│   ├── tx/                 # Transaction constructor
+│   │   ├── builder.ts      # Unsigned chunk + anchor tx builders
+│   │   ├── encoding.ts     # OP_PUSHDATA payload encoding
+│   │   ├── fees.ts         # Exact byte-count fee estimator
+│   │   ├── receipt.ts      # PublicationRecord builder
+│   │   ├── rawtx.ts        # Raw BSV transaction serialization
+│   │   ├── script.ts       # Script assembly
+│   │   ├── varint.ts       # Bitcoin varint encoding
+│   │   └── types.ts        # Tx and UTXO types
+│   ├── renderer/           # Stateless renderer
+│   │   ├── handler.ts      # HTTP request handler
+│   │   ├── resolver.ts     # Manifest + txid resolution from chain
+│   │   ├── fetcher.ts      # Chunk fetching via pluggable ChunkSource
+│   │   ├── chain.ts        # TxChunkSource (WoC-backed)
+│   │   ├── reconstruct.ts  # File tree reconstruction from verified chunks
+│   │   ├── sanitize.ts     # HTML sanitizer, EXIF stripper
+│   │   ├── pdfstrip.ts     # PDF /Info dictionary stripper
+│   │   ├── zip.ts          # Verified-content ZIP packager
+│   │   └── errors.ts       # Renderer error types
+│   ├── chain/              # Chain reader (WhatsOnChain)
+│   ├── indexer/            # Optional indexer
+│   │   ├── scan.ts         # Block scanner for SAMIZDAT anchors
+│   │   ├── store.ts        # Append-only IndexStore
+│   │   └── server.ts       # Search API
+│   ├── test-vectors/       # Committed reproducibility vectors
+│   │   └── vectors.json
+│   ├── index.ts            # Library entry point
+│   └── server.ts           # Renderer HTTP server entry point
+├── editor/                 # Tor-safe web editor
+│   ├── src/
+│   │   ├── main.ts         # Publish state machine + UI
+│   │   ├── guide.ts        # Built-in guide + Hello World sample
+│   │   ├── mime.ts         # Magic-byte MIME detection
+│   │   ├── styles.css      # Self-contained styles (sz-* prefix)
+│   │   └── vite-env.d.ts
+│   ├── index.html          # CSP headers inline
+│   └── dist/               # Production build (served by nginx on onion)
+├── scripts/
+│   └── sign-tx.ts          # CLI signing tool (ElectrumSV-compatible)
+├── tests/
+│   ├── core/               # Unit tests — hash, merkle, chunker, manifest
+│   ├── tx/                 # Unit tests — builder, fees, receipt, encoding
+│   ├── renderer/           # Unit tests — sanitize, pdfstrip, zip, handler
+│   ├── chain/              # Unit tests — TxChunkSource
+│   ├── editor/             # Unit tests — markdown, MIME detection
+│   └── e2e/                # Playwright E2E tests (20 tests, full flow)
+│       └── editor.test.ts
+├── deploy/                 # Deployment artifacts
+│   ├── install.sh          # One-command server installer
+│   ├── nginx-samizdat.conf # nginx config (onion backend only)
+│   ├── samizdat-renderer.service
+│   └── samizdat-indexer.service
+├── directory/
+│   └── index.html          # Zero-JS community directory page
+├── docs/
+│   ├── deployment.md       # Onion + clearnet + private node guides
+│   ├── opsec-guide.md      # Operational security for authors
+│   ├── security-audit.md   # Security audit — all 7 hard rules verified
+│   ├── tor-browser-test.md # Manual Tor Browser test checklist
+│   └── bsv-integration.md  # BSV transaction encoding details
+├── SPEC.md                 # Full protocol specification (30 sections)
+├── KICKOFF.md              # Implementation decisions log
+├── GOAL.md                 # Completion criteria (all satisfied)
+└── DONATE.md               # Donation addresses
+```
+
+---
+
+## Getting Started
+
+**Requirements:** Node 20+, npm
+
+```bash
+git clone git@github.com:samizdatproject/samizdat.git
+cd samizdat
+npm install
+npm test              # 313 unit tests
+npm run typecheck     # zero type errors
+```
+
+---
+
+## Running the Editor
+
+The editor is a fully self-contained static web app. No server-side logic. No network requests. No dependencies at runtime.
+
+```bash
+cd editor
+npm install
+npm run dev           # http://localhost:5173 — secure context, crypto.subtle works
+
+npm run build         # production bundle → editor/dist/
+npm run preview       # serve built dist at http://localhost:4173
+```
+
+**For remote / container access (HTTPS):**
+
+```bash
+cd editor
+npm run dev:https     # https://0.0.0.0:5173 — self-signed cert, accept once
+npm run preview:https # https://0.0.0.0:4173
+```
+
+The editor loads with a Hello World sample and a built-in guide (click **Guide** in the header) covering:
+- How to use Tor Browser and obtain an anonymous BSV address
+- The 10-step publish flow explained step by step
+- How to sign unsigned transactions with ElectrumSV or the CLI tool
+- Operational security warnings for each publish step
+
+---
+
+## Running the Renderer
+
+The renderer is a stateless Node HTTP service. It accepts a BSV txid or manifest hash, fetches the on-chain data via WhatsOnChain, verifies all hashes, and serves safe HTML or a download.
+
+```bash
+# Development
+npm run build
+tsx src/server.ts
+
+# Production (via deploy/install.sh)
+sudo bash deploy/install.sh
+```
+
+The installer:
+- Creates a `samizdat` system user
+- Builds the project
+- Installs `samizdat-renderer.service` and `samizdat-indexer.service` as systemd units
+- Drops `deploy/nginx-samizdat.conf` for nginx proxy configuration
+- Prints final status
+
+Environment variables for the renderer:
+
+```bash
+PORT=3000              # HTTP port (default: 3000)
+NODE_ENV=production
+```
+
+---
+
+## Deploying an Onion Site
+
+The editor is designed to be served as a Tor hidden service. This is the recommended deployment for maximum author anonymity.
+
+### Quick setup
+
+```bash
+# 1. Install tor and nginx
+apt install tor nginx
+
+# 2. Build the editor
+cd /path/to/samizdat/editor && npm run build
+
+# 3. Add nginx backend (127.0.0.1:8765 only — never on a public interface)
+cat > /etc/nginx/sites-available/samizdat-onion << 'EOF'
+server {
+    listen 127.0.0.1:8765;
+    root /path/to/samizdat/editor/dist;
+    index index.html;
+    access_log off;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'self';" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    location / { try_files $uri $uri/ /index.html; }
+}
+EOF
+ln -s /etc/nginx/sites-available/samizdat-onion /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+
+# 4. Configure the hidden service
+cat >> /etc/tor/torrc << 'EOF'
+HiddenServiceDir /var/lib/tor/samizdat/
+HiddenServicePort 80 127.0.0.1:8765
+HiddenServiceVersion 3
+EOF
+systemctl restart tor
+
+# 5. Get your .onion address
+cat /var/lib/tor/samizdat/hostname
+```
+
+The v3 onion address (56 characters, ed25519) is printed by the last command. Share it with authors.
+
+### Key material
+
+```
+/var/lib/tor/samizdat/
+├── hostname                  — the .onion address (public, shareable)
+├── hs_ed25519_secret_key     — KEEP OFFLINE — loss = permanent loss of address
+└── hs_ed25519_public_key
+```
+
+Back up `hs_ed25519_secret_key` immediately. If lost, the `.onion` address cannot be recovered. If leaked, anyone can impersonate the site.
+
+### Updating
+
+```bash
+cd /path/to/samizdat/editor && npm run build
+# nginx serves dist/ directly — no reload needed
+```
+
+For detailed deployment guides including clearnet mirrors, private nodes, and monitoring that does not log user queries, see [`docs/deployment.md`](docs/deployment.md).
+
+---
+
+## CLI Transaction Signing
+
+Authors who prefer a command-line workflow can use the included signing script instead of ElectrumSV.
+
+```bash
+# Install dependency (already in package.json)
+npm install
+
+# Sign a transaction
+echo "$WIF" | npx tsx scripts/sign-tx.ts \
+  --tx <unsigned-tx-hex> \
+  --sats <input-satoshis> \
+  --script <locking-script-hex>
+```
+
+The script reads the WIF private key from stdin (avoids shell history). It uses `@noble/curves/secp256k1` (Trail of Bits audited) for BIP143 signing with SIGHASH_FORKID (0x41), which is required for BSV.
+
+The signed transaction hex is printed to stdout and can be broadcast via any BSV node, WhatsOnChain, or ElectrumSV.
+
+**Security note:** Never paste a WIF key directly into a browser. The CLI signing tool is explicitly designed to keep key material outside the browser context entirely.
+
+---
+
+## Testing
+
+```bash
+npm test                   # 313 unit tests (Vitest)
+npm run test:watch         # watch mode
+npm run test:coverage      # coverage report
+npm run typecheck          # tsc --noEmit (zero errors)
+
+npm run e2e                # 20 Playwright E2E tests (full publish flow)
+npm run generate-vectors   # regenerate src/test-vectors/vectors.json
+```
+
+### Test coverage
+
+| Area | Tests | What is covered |
+|---|---|---|
+| Hash (`src/core/hash.ts`) | 18 | Domain-separated SHA-256, leaf vs. interior-node prefixes |
+| Merkle (`src/core/merkle.ts`) | 24 | Tree construction, odd-level duplicate rule, root verification |
+| Chunker (`src/core/chunker.ts`) | 16 | Fixed-size splitting, final chunk true length, determinism |
+| Manifest (`src/core/manifest.ts`) | 22 | Builder, strict validator, required fields, schema |
+| Transaction builder (`src/tx/`) | 8 | Unsigned chunk tx, unsigned anchor tx, fee estimation, receipt |
+| Renderer (`src/renderer/`) | 27 | Sanitize, EXIF strip, PDF strip, ZIP, hash verification, handler |
+| Chain source (`src/chain/`) | 6 | TxChunkSource, payload decoding |
+| Editor Markdown | 15 | Markdown render, sanitization |
+| E2E (`tests/e2e/`) | 20 | Full publish flow IDLE→RECEIPT, MIME detection, guide panel, privacy leak detection |
+
+### Test vectors
+
+`src/test-vectors/vectors.json` contains committed, fixed inputs with known root hashes. These are the reproducibility guarantee for the protocol — any correct implementation must produce the same roots from the same inputs.
+
+```bash
+npm run generate-vectors   # regenerate from current implementation
+```
+
+If the generated file differs from the committed one, the implementation has diverged from the reference.
+
+---
+
+## Protocol Specification
+
+The full protocol specification is in [`SPEC.md`](SPEC.md) (30 sections, ~1,100 lines). Key sections:
+
+| Section | Topic |
+|---|---|
+| §2 | Core design principles |
+| §4 | Threat model and adversaries |
+| §7 | Canonical publish flow (7 stages) |
+| §8 | Data model — file object, chunk object, manifest, publication record |
+| §9 | Chunking specification — determinism, boundary rules, failure handling |
+| §10 | OP_PUSHDATA handling — encoding, constraints, appropriate use |
+| §12 | Privacy and anonymity rules — safe defaults, metadata stripping |
+| §13 | Renderer specification — verification requirements, safety rules |
+| §17 | Payment model — what is allowed, what is forbidden, refund logic |
+| §20 | Verification rules — conditions for a valid published object |
+| §30 | Naming discipline — canonical vocabulary |
+
+---
+
+## Hard Rules
+
+These seven constraints hold in every layer and every future version. Violation of any one is a blocker, not a deferral.
+
+1. **No browser extension in the publish flow** — ever. Extensions weaken anonymity, increase fingerprinting, and break Tor compatibility.
+
+2. **No private key material in the browser** — ever. The editor exports unsigned transactions for external signing. There is no key import, no wallet UI, no signing inside the page.
+
+3. **No anchor transaction until chunk hashes are verified** — the anchor tx is not built or exported until the author pastes the signed chunk tx hex and the client has re-hashed every chunk payload and confirmed it matches the declared chunk hash.
+
+4. **Renderer refuses unverified content** — if any chunk hash fails or the Merkle root mismatches, the renderer returns a 422 and a clean error page. It never renders partially verified content.
+
+5. **Document metadata stripped locally before hashing** — PDF `/Info` dictionary, JPEG/PNG EXIF, Office document metadata are stripped in the client before the content is hashed and manifested.
+
+6. **Platform never custodies funds** — the authoring client never holds funds. The operator never pays for user publications. Each author pays their own fees from their own wallet.
+
+7. **Transaction constructor is wallet-agnostic** — the unsigned tx output format (`{hex, inputs: [{outpoint, satoshis, lockingScript}]}`) is compatible with any BSV wallet. The protocol does not require one SDK or one wallet provider.
+
+---
+
+## Threat Model
+
+SAMIZDAT explicitly considers the following adversaries:
+
+- **Network observers** — mitigated by Tor Browser + onion service (no clearnet IP exposure)
+- **Browser fingerprinting** — mitigated by no extensions, no third-party assets, CSP `connect-src 'none'`
+- **Malicious hosting operators** — mitigated by content-addressed verification (every byte is hashed before rendering)
+- **Malicious indexers** — mitigated by non-canonical status (`"canonical": false` on all results)
+- **Chain reorganization** — acknowledged; the protocol notes txids and block heights; manifests survive reorgs as long as the data remains retrievable
+- **Metadata deanonymization** — mitigated by mandatory EXIF/PDF stripping and privacy warnings in the REVIEW step
+- **Fee manipulation** — mitigated by fee estimation displayed before confirmation; author controls their own UTXO
+- **Malformed manifests** — mitigated by strict validator that rejects manifests with missing mandatory fields
+
+**Chain API visibility** — when the renderer queries WhatsOnChain or Bitails to fetch transactions, those services can log the queried txids, timing, and the renderer's IP. For operators running a public renderer, this means WoC/Bitails can observe which content is being read and when. Mitigation: run the renderer with `CHAIN_SOURCE=node` pointing to a self-hosted BSV node (`BSV_NODE_HOST` / `BSV_NODE_PORT` / `BSV_NODE_USER` / `BSV_NODE_PASS`), or route chain queries through Tor if using a third-party API.
+
+What the protocol does **not** protect against:
+
+- Timing correlation attacks at the network level (not specific to this protocol)
+- Reused pseudonyms or payment patterns that correlate activity (documented in `docs/opsec-guide.md`)
+- Browser vulnerabilities unrelated to this application
+
+---
+
+## Manifest Format
+
+A manifest is a JSON object. All mandatory fields must be present; the validator rejects any manifest missing them.
+
+```jsonc
+{
+  "version": 1,
+  "authorMode": "anonymous",        // "anonymous" | "pseudonymous" | "signed"
+  "publicationMode": "on-chain",    // "on-chain" | "hybrid"
+  "fileTree": [
+    {
+      "name": "article.md",
+      "contentType": "text/markdown",
+      "size": 4096,
+      "sha256": "e3b0c44298fc1c149afb...",
+      "chunkRefs": [0, 1]
+    }
+  ],
+  "chunkTree": [
+    {
+      "index": 0,
+      "size": 65536,
+      "hash": "a665a45920422f9d417e..."
+    },
+    {
+      "index": 1,
+      "size": 3821,           // true byte length — final chunk is never padded
+      "hash": "b94f6f125c79e3..."
+    }
+  ],
+  "rootHash": "3fdba35f04dc8c462986...",   // Merkle root over all chunk hashes
+  "txidAnchor": "f4184fc596403b9d638...",  // set after anchor broadcast
+  // Optional fields:
+  "title": "On Censorship Resistance",
+  "subtitle": "A technical analysis",
+  "tags": ["privacy", "bsv", "protocol"],
+  "language": "en",
+  "createdAt": "2026-06-26T00:00:00Z",
+  "expiry": null,
+  "previousManifest": null,
+  "rendererHints": {}
+}
+```
+
+### Hashing
+
+All hashes use SHA-256 with domain separation to prevent second-preimage attacks:
+
+- **Leaf hash**: `SHA-256("SAMIZDAT_LEAF_1:" || chunk_bytes)`
+- **Interior node hash**: `SHA-256("SAMIZDAT_NODE_1:" || left_hash || right_hash)`
+- **Odd levels**: the last node is duplicated before hashing (defined explicitly in `src/core/merkle.ts`)
+
+---
+
+## Transaction Encoding
+
+Chunk payloads and the manifest anchor are encoded as **data-carrier P2PKH outputs** using the `<PUSHDATA(blob)> OP_DROP <P2PKH>` script pattern. The data blob is pushed and immediately dropped; the remaining P2PKH suffix is spendable by the author's key. Each data-carrier output carries 1 satoshi.
+
+The durability of anchored data depends on chain infrastructure retaining transaction history. OP_PUSHDATA encoding is used because it is the established BSV data-carrier pattern and is indexed by block explorers such as WhatsOnChain and Bitails.
+
+The transaction output structure (data carrier first, change second):
+
+```
+Output 0: <PUSHDATA(blob)> OP_DROP OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG   (data carrier, 1 sat)
+Output 1: OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG                            (change)
+```
+
+The blob is encoded using `OP_PUSHDATA1` / `OP_PUSHDATA2` / `OP_PUSHDATA4` depending on payload size (`src/tx/script.ts` — `writePushData`). Chunk size limits are governed by current BSV miner policy — verify limits before deployment; do not assume legacy Bitcoin push caps apply.
+
+The anchor output blob contains:
+- Protocol marker: `SMZD` (4 bytes)
+- Record type + version (2 bytes)
+- Manifest hash (32 bytes)
+- Merkle root (32 bytes)
+- Chunk txids JSON (variable length)
+- Full manifest JSON (variable length)
+
+Full encoding details: [`docs/bsv-integration.md`](docs/bsv-integration.md).
+
+---
+
+## Verification Flow
+
+A reader verifying a published document:
+
+```
+1. Obtain the anchor txid or manifest hash
+2. Renderer fetches the anchor tx from BSV chain
+3. Renderer decodes the payload: extracts manifest hash + root hash
+4. Renderer fetches the manifest (from chain or mirror)
+5. Renderer validates manifest schema (strict validator)
+6. For each chunk reference in the manifest:
+   a. Fetch chunk data from available source
+   b. verifyChunkData(chunk.data, chunk.hash) — must pass
+7. verifyMerkleRoot(chunk_hashes, manifest.rootHash) — must pass
+8. Reconstruct file tree from verified chunks
+9. Sanitize HTML / strip EXIF / serve PDF as attachment
+10. Present content with a verified badge
+```
+
+If any step from 6 onward fails, the renderer returns a `422 Unverifiable Content` response. It never presents partially verified content as verified.
+
+---
+
+## Contributing
+
+The protocol is designed to be forked, extended, and independently implemented.
+
+**Running the tests before opening a PR:**
+```bash
+npm test && npm run typecheck && npm run e2e
+```
+
+**Areas most useful for contribution:**
+
+- Additional `ChunkSource` implementations (IPFS, BitTorrent, Filecoin, S3)
+- Alternative renderer implementations (Python, Go, Rust)
+- Indexer improvements (full-text search, tag filtering, multi-language)
+- Editor improvements (bundle composer, static site mode, evidence pack mode)
+- Packaging for Tails OS and Whonix
+- Additional language translations for the guide panel
+
+The protocol spec (`SPEC.md`) documents what is mandatory versus optional. Any implementation that passes the test vectors in `src/test-vectors/vectors.json` is a compliant implementation.
+
+---
+
+## Support
+
+SAMIZDAT is free, open-source software. No tracking, no telemetry, no ads.
+
+**Monero (XMR)** — recommended for privacy:
+```
+4Av1J2bZdvkes5j9ZFLZhuRoKHwK4HmyrdHywAKoVSZzEW6RQ3mq7JpWExNiBMxYSRFTvv2ygWNCaTASZbnpUJAo8Fs6BGQ
+```
+
+**Bitcoin (BTC):**
+```
+bc1qeupr8q5lpft4zy2fagtvly7eqjy2crqk7g979s
+```
+
+All donations go directly to protocol development.
+
+---
+
+## License
+
+Open source. See repository for license terms.
+
+The protocol specification (`SPEC.md`) and test vectors (`src/test-vectors/vectors.json`) are placed in the public domain — implement them freely, in any language, for any purpose.

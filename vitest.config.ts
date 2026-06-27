@@ -1,0 +1,15 @@
+import { defineConfig } from 'vitest/config';
+import { resolve } from 'path';
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      '@samizdat': resolve(__dirname, 'src'),
+    },
+  },
+  test: {
+    environment: 'node',
+    include: ['tests/**/*.test.ts'],
+    exclude: ['tests/e2e/**'],
+  },
+});

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'self'">
+  <title>SAMIZDAT — BSV Anonymous Publishing Protocol</title>
+  <style>
+    :root {
+      --bg:        #ffffff;
+      --bg-off:    #f8fafc;
+      --bg-dim:    #f1f5f9;
+      --border:    #e2e8f0;
+      --border-md: #cbd5e1;
+      --text:      #0f172a;
+      --text-mid:  #1e293b;
+      --text-dim:  #4b5563;
+      --text-lo:   #6b7280;
+      --green:     #14532d;
+      --green-line:#bbf7d0;
+      --amber:     #78350f;
+      --amber-line:#fde68a;
+      --amber-bg:  #fffbeb;
+      --font:      'Courier New', Courier, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-size: 16px; background: var(--bg-off); }
+
+    body {
+      font-family: var(--font);
+      font-size: 1rem;
+      line-height: 1.65;
+      color: var(--text);
+      background: var(--bg-off);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-off); }
+    ::-webkit-scrollbar-thumb { background: var(--border-md); }
+
+    a { color: var(--text); text-decoration: underline; }
+    a:hover { color: var(--text-mid); }
+
+    /* ── Header ── */
+    header {
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .sz-name {
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    .sz-tagline {
+      font-size: 0.65rem;
+      letter-spacing: 0.06em;
+      color: var(--text-lo);
+    }
+
+    /* ── Main ── */
+    main {
+      max-width: 860px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 2.5rem 2rem;
+      flex: 1;
+    }
+
+    /* ── Section ── */
+    section {
+      border: 1px solid var(--border);
+      margin-bottom: 1.25rem;
+      background: var(--bg);
+    }
+
+    .section-head {
+      border-bottom: 1px solid var(--border);
+      padding: 0.5rem 1.25rem;
+      font-size: 0.62rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      background: var(--bg-off);
+    }
+
+    .section-body {
+      padding: 1.25rem;
+    }
+
+    p { margin-bottom: 0.75rem; font-size: 0.9375rem; }
+    p:last-child { margin-bottom: 0; }
+
+    /* ── Endpoint list ── */
+    .endpoint-list { display: flex; flex-direction: column; gap: 0; }
+
+    .endpoint-card {
+      border: 1px solid var(--border);
+      padding: 0.875rem 1rem;
+      margin-bottom: 0.5rem;
+      background: var(--bg-off);
+    }
+
+    .endpoint-card .ep-name {
+      font-size: 0.8125rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text);
+      text-transform: uppercase;
+    }
+
+    .endpoint-card .ep-addr {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      margin-top: 0.2rem;
+      word-break: break-all;
+    }
+
+    .endpoint-card .ep-meta {
+      font-size: 0.8125rem;
+      color: var(--text-lo);
+      margin-top: 0.3rem;
+      line-height: 1.5;
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.58rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.1em 0.45em;
+      margin-right: 0.3em;
+      border: 1px solid;
+    }
+
+    .badge-onion    { color: #4c1d95; border-color: #8b5cf6; }
+    .badge-clearnet { color: var(--text-lo); border-color: var(--border-md); }
+    .badge-self     { color: var(--green); border-color: var(--green-line); }
+
+    .empty-note {
+      border: 1px dashed var(--border-md);
+      padding: 1rem 1.25rem;
+      font-size: 0.875rem;
+      color: var(--text-lo);
+      font-style: italic;
+      background: var(--bg-off);
+    }
+
+    /* ── Warning box ── */
+    .warn-block {
+      border: 1px solid var(--amber-line);
+      border-left: 2px solid var(--amber);
+      background: var(--amber-bg);
+      padding: 0.875rem 1rem;
+      margin: 0.75rem 0;
+    }
+
+    .warn-label {
+      font-size: 0.62rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--amber);
+    }
+
+    .warn-block ul {
+      padding-left: 1.25rem;
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--text-mid);
+    }
+
+    .warn-block li {
+      margin-bottom: 0.375rem;
+      line-height: 1.5;
+    }
+
+    .warn-block li strong {
+      font-size: 0.8em;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--amber);
+    }
+
+    /* ── Resource list ── */
+    .resource-list { list-style: none; }
+
+    .resource-list li {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.875rem;
+    }
+
+    .resource-list li:last-child { border-bottom: none; }
+
+    .resource-list .res-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-lo);
+      flex-shrink: 0;
+      min-width: 100px;
+    }
+
+    /* ── Contribute block ── */
+    .contribute-body { font-size: 0.9rem; }
+
+    .contribute-body ol {
+      padding-left: 1.25rem;
+      margin: 0.625rem 0;
+    }
+
+    .contribute-body li { margin-bottom: 0.3rem; }
+
+    .contribute-body code {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.8em;
+      background: var(--bg-dim);
+      padding: 0.1em 0.3em;
+      color: var(--text-dim);
+    }
+
+    .contribute-note {
+      margin-top: 0.875rem;
+      font-size: 0.8125rem;
+      color: var(--text-dim);
+      border-top: 1px solid var(--border);
+      padding-top: 0.75rem;
+    }
+
+    /* ── Footer ── */
+    footer {
+      background: var(--bg-off);
+      border-top: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 600px) {
+      main { padding: 1.5rem 1rem; }
+      header { padding: 0 1rem; flex-direction: column; height: auto; padding: 0.75rem 1rem; gap: 0.2rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="sz-name">SAMIZDAT</span>
+  <span class="sz-tagline">BSV anonymous publishing protocol &mdash; community directory</span>
+</header>
+
+<main>
+
+  <section>
+    <div class="section-head">About this directory</div>
+    <div class="section-body">
+      <p>
+        SAMIZDAT is a protocol for anonymous, non-custodial, onion-first content publishing anchored on
+        the BSV blockchain. This page lists known renderers and indexers run by the community.
+      </p>
+      <p>
+        <strong>This directory is not authoritative.</strong> No entry here is more &ldquo;official&rdquo; than
+        any other. Content is verified cryptographically by the renderer &mdash; not by this list.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">Renderers</div>
+    <div class="section-body">
+      <p>
+        A renderer fetches a publication by txid, verifies all chunk hashes against the
+        Merkle root, and serves the content. Any renderer that passes all hash checks is
+        trustworthy by the protocol design &mdash; you do not need to trust the operator.
+      </p>
+
+      <div class="endpoint-list">
+        <!-- Community operators: add your renderer here via pull request.
+             Format:
+             <div class="endpoint-card">
+               <div class="ep-name">Your renderer name</div>
+               <div class="ep-addr">http://youronion.onion/</div>
+               <div class="ep-meta">
+                 <span class="badge badge-onion">onion</span>
+                 Operated by [handle]. No logs.
+               </div>
+             </div>
+        -->
+        <div class="empty-note">
+          No community renderers listed yet. Be the first &mdash; see &ldquo;How to add your endpoint&rdquo; below.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">Indexers</div>
+    <div class="section-body">
+      <p>
+        An indexer scans the BSV chain for SAMIZDAT anchor transactions and exposes a search API.
+        Indexers are explicitly non-canonical &mdash; their results are convenience pointers, not proof
+        of publication. Proof is always the on-chain anchor.
+      </p>
+
+      <div class="endpoint-list">
+        <!-- Community operators: add your indexer here via pull request -->
+        <div class="empty-note">
+          No community indexers listed yet.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">! Privacy warnings for new publishers</div>
+    <div class="section-body">
+      <div class="warn-block">
+        <div style="font-size:0.875rem;color:var(--amber);margin-bottom:0.5rem">
+          <span class="warn-label">Read before publishing.</span>
+        </div>
+        <ul>
+          <li><strong>Publication is permanent and irreversible.</strong>
+            Once anchored on-chain, the content hash and all chunk data are publicly accessible forever.</li>
+          <li><strong>Use Tor Browser.</strong>
+            Open the editor from an onion address. Your IP address should never be associated with your content.</li>
+          <li><strong>Use an onion-accessible BSV wallet.</strong>
+            Transaction broadcasts expose your network location. Sign and broadcast from within the Tor network.</li>
+          <li><strong>Strip metadata before uploading.</strong>
+            The editor strips JPEG/PNG EXIF and PDF /Info fields automatically.
+            For other formats (Office documents, audio/video), strip metadata manually with ExifTool before uploading.</li>
+          <li><strong>Transaction timing and size are observable.</strong>
+            A chain observer can correlate transactions to your content.
+            Avoid publishing at predictable times or from a wallet linked to your identity.</li>
+          <li><strong>Filenames are public.</strong>
+            All filenames in the manifest are stored in plaintext on-chain.
+            Do not use identifying filenames.</li>
+          <li><strong>The title field is public.</strong>
+            The manifest title (if set) is stored in plaintext on-chain.
+            Leave it blank or use a pseudonymous title.</li>
+        </ul>
+      </div>
+      <p style="font-size:0.875rem;color:var(--text-dim)">
+        For a full threat model and operational security guide, see <a href="../docs/opsec-guide.md">docs/opsec-guide.md</a>.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">Protocol resources</div>
+    <div class="section-body">
+      <ul class="resource-list">
+        <li>
+          <span class="res-label">Spec</span>
+          <a href="../SPEC.md">SPEC.md</a> &mdash; the SAMIZDAT protocol specification
+        </li>
+        <li>
+          <span class="res-label">Implementation</span>
+          <a href="../KICKOFF.md">KICKOFF.md</a> &mdash; locked implementation decisions
+        </li>
+        <li>
+          <span class="res-label">Test vectors</span>
+          <a href="../src/test-vectors/vectors.json">vectors.json</a> &mdash; canonical hash vectors for interoperability testing
+        </li>
+        <li>
+          <span class="res-label">Opsec guide</span>
+          <a href="../docs/opsec-guide.md">docs/opsec-guide.md</a> &mdash; operational security for publishers and node operators
+        </li>
+        <li>
+          <span class="res-label">Deployment</span>
+          <a href="../docs/deployment.md">docs/deployment.md</a> &mdash; onion service and self-hosted node guide
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">How to add your endpoint</div>
+    <div class="section-body contribute-body">
+      <p>This directory is a community-maintained static HTML file. To list your renderer or indexer:</p>
+      <ol>
+        <li>Fork the SAMIZDAT repository</li>
+        <li>Edit <code>directory/index.html</code> &mdash; add an <code>&lt;div class="endpoint-card"&gt;</code>
+          in the appropriate section</li>
+        <li>Include: name, address, badge type (<code>onion</code> / <code>clearnet</code> /
+          <code>self-hosted</code>), brief description of your privacy policy</li>
+        <li>Open a pull request</li>
+      </ol>
+      <div class="contribute-note">
+        Listing requirements: no logs of txid queries or reader IPs; no user accounts; no tracking.
+        Operators who cannot meet these requirements should not be listed.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">Running your own node</div>
+    <div class="section-body">
+      <p>
+        You do not need a listing here to use SAMIZDAT. Any author can publish using the editor,
+        and any reader can retrieve content from any renderer by knowing the txid. The protocol
+        has no canonical gateway.
+      </p>
+      <p>
+        See <a href="../docs/deployment.md">docs/deployment.md</a> for a complete guide to running
+        your own renderer, indexer, or editor on an onion service.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  SAMIZDAT community directory &mdash; not authoritative &mdash; entries are self-reported &mdash; verify content cryptographically
+</footer>
+
+</body>
+</html>

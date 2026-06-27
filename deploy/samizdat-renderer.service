@@ -1,0 +1,30 @@
+[Unit]
+Description=SAMIZDAT Renderer — stateless BSV content renderer
+Documentation=https://github.com/your-org/samizdat/blob/main/docs/deployment.md
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=samizdat
+Group=samizdat
+WorkingDirectory=/opt/samizdat
+ExecStart=/usr/bin/node --experimental-vm-modules dist/server.js
+Restart=on-failure
+RestartSec=5s
+
+# Bind loopback only — put nginx or Caddy in front
+Environment=PORT=3000
+Environment=HOST=127.0.0.1
+Environment=BSV_NETWORK=main
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/samizdat
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

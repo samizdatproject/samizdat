@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
+  <title>SAMIZDAT</title>
+</head>
+<body>
+  <header class="sz-header">
+    <span class="sz-header-name">SAMIZDAT</span>
+    <div style="display:flex;align-items:center;gap:1rem">
+      <button class="sz-header-guide-btn" id="guide-btn">Guide</button>
+      <span class="sz-header-version">v0.1.0</span>
+    </div>
+  </header>
+
+  <div id="stepbar"></div>
+
+  <main class="sz-main" id="main-content">
+    <div id="content" class="sz-editor-layout"></div>
+  </main>
+
+  <footer class="sz-footer">
+    content prepared locally. nothing has been sent.
+  </footer>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

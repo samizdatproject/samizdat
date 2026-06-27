@@ -1,0 +1,11 @@
+node_modules/
+editor/node_modules/
+coverage/
+dist/
+editor/dist/
+editor/dist-editor/
+.claude/
+test-results/
+playwright-report/
+*.log
+.DS_Store
