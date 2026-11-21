@@ -1,5 +1,7 @@
 # SAMIZDAT
 
+> **Status:** early reference implementation (June 2026), not under active development.
+
 **BSV Anonymous Publishing Protocol — Reference Implementation**
 
 SAMIZDAT is an open protocol and reference implementation for anonymous, non-custodial, onion-first content publishing anchored on the BSV blockchain. Anyone can publish an article, PDF, image bundle, or static site — paying their own fees, signing with their own wallet, through Tor Browser — with no account, no login, and no operator able to censor, de-platform, or charge a toll on their behalf.
